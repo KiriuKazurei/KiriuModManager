@@ -1,0 +1,47 @@
+{
+  "name": "kiriu-mods-manager",
+  "version": "0.0.1",
+  "private": true,
+  "description": "本地双游戏 Mod 管理器",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.main.json",
+    "build": "tsc -p tsconfig.main.json && vite build",
+    "dev": "node scripts/dev.mjs",
+    "start": "electron .",
+    "test": "tsx --test tests/*.test.ts",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:framework": "node scripts/smoke-framework.mjs",
+    "smoke:deployment": "node scripts/smoke-deployment.mjs",
+    "smoke:mods": "node scripts/smoke-mods.mjs",
+    "smoke:business": "node scripts/smoke-business.mjs",
+    "package:win": "npm.cmd run build && node scripts/package-windows.mjs",
+    "smoke:desktop": "node scripts/smoke-desktop.mjs",
+    "smoke:app-update": "node scripts/smoke-app-update.mjs",
+    "smoke:packaged": "node scripts/smoke-desktop.mjs --packaged",
+    "verify:official": "node scripts/verify-official.mjs",
+    "smoke:gallery": "node scripts/smoke-gallery.mjs",
+    "smoke:gallery:packaged": "node scripts/smoke-gallery.mjs --packaged",
+    "api:inventory": "node scripts/api-inventory.mjs --write",
+    "api:check": "node scripts/api-inventory.mjs"
+  },
+  "dependencies": {
+    "7zip-bin-full": "^26.4.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "yauzl": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/yauzl": "^3.4.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "44.7.0",
+    "fflate": "^0.8.3",
+    "playwright": "^1.56.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  }
+}

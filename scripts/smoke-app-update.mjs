@@ -1,0 +1,67 @@
+import {_electron as electron,chromium} from 'playwright';
+import {promises as fs,createReadStream} from 'node:fs';
+import {createServer} from 'node:http';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {createHash} from 'node:crypto';
+import {path7z} from '7zip-bin-full';
+
+const oldReport=JSON.parse(await fs.readFile(process.argv[2]||'.run-data/update-validation/old/package-report.json','utf8'));
+const newReport=JSON.parse(await fs.readFile(process.argv[3]||'.run-data/update-validation/new/package-report.json','utf8'));
+const parent=path.resolve('.run-data/update-validation/smoke');await fs.mkdir(parent,{recursive:true});const run=await fs.mkdtemp(path.join(parent,'run-'));
+const outcomes=[];const errors=[];let app;let browser;let currentPid;let replacementPid;let mode='good';let servedArchive=newReport.archive;
+const remote='https://updates.example.test/kmm-update.json';let info=JSON.parse(await fs.readFile(newReport.updateManifest,'utf8'));info.url='https://updates.example.test/update.zip';info.notes='更新验证：下载、校验、退出、替换、重启。\n<script>window.__unsafe=true</script>';
+const server=createServer((req,res)=>{
+ if(mode==='offline'){res.writeHead(503);res.end('offline fixture');return;}
+ if(req.url==='/kmm-update.json'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(info));return;}
+ if(req.url==='/update.zip'){res.writeHead(200,{'Content-Type':'application/zip'});if(mode==='corrupt'){res.end('corrupt fixture');return;}createReadStream(servedArchive).pipe(res);return;}
+ res.writeHead(404);res.end();
+});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;
+async function write(file,data){await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,data);}
+function value(result){assert.equal(result.ok,true,result.error);return result.value;}
+async function waitFor(check,timeout=90000){const until=Date.now()+timeout;while(Date.now()<until){const result=await check();if(result)return result;await new Promise(resolve=>setTimeout(resolve,250));}throw new Error('Timed out waiting for update result.');}
+async function availablePort(){const probe=createServer();await new Promise(resolve=>probe.listen(0,'127.0.0.1',resolve));const result=probe.address().port;await new Promise(resolve=>probe.close(resolve));return result;}
+async function setup(name){
+ const directory=path.join(run,name);const install=path.join(directory,'程序 有空格');const data=path.join(directory,'data');await fs.cp(oldReport.directory,install,{recursive:true});const settings={version:1,selectedGame:'endfield',games:{},desktop:{marketUrl:'',updateUrl:'',closeToTray:true,updateSourceUrl:remote}};
+ for(const game of ['zzz','endfield']){settings.games[game]={xxmiRoot:path.join(directory,game,'XXMI'),gameDirectory:path.join(directory,game,'Game'),modsDirectory:path.join(directory,game,'Mods')};await write(path.join(settings.games[game].modsDirectory,'KeepMe','main.ini'),'; user Mod bytes stay intact\n[TextureOverride]\nhash=abcdef01');}
+ await write(path.join(data,'settings.json'),JSON.stringify(settings));await write(path.join(data,'user-marker.txt'),'unchanged user data');const settingsBytes=await fs.readFile(path.join(data,'settings.json'));const debugPort=await availablePort();
+ const env={...process.env,KMM_DATA_DIR:data,KMM_DEBUG_PORT:String(debugPort)};delete env.ELECTRON_RUN_AS_NODE;delete env.KMM_DEV_URL;delete env.KMM_UPDATE_JOB;
+ app=await electron.launch({executablePath:path.join(install,'KiriuModsManager.exe'),args:[],cwd:directory,env});currentPid=app.process().pid;const page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('heading',{name:'管理器更新',exact:true}).waitFor();
+ await app.evaluate(({net,dialog},port)=>{const original=net.fetch.bind(net);net.fetch=(url,options)=>original(`http://127.0.0.1:${port}${new URL(url).pathname}`,options);globalThis.__updateChoice=0;globalThis.__updateDialogs=[];dialog.showMessageBox=async(_window,options)=>{globalThis.__updateDialogs.push(options);return {response:globalThis.__updateChoice,checkboxChecked:false};};},port);
+ return {directory,install,data,page,settings,settingsBytes,debugPort};
+}
+async function choice(n){await app.evaluate((_,n)=>{globalThis.__updateChoice=n;},n);}
+async function screenshot(page,file){await page.locator('.app-update-panel').scrollIntoViewIfNeeded();const session=await page.context().newCDPSession(page);try{const result=await session.send('Page.captureScreenshot',{format:'png',fromSurface:false,captureBeyondViewport:false});await fs.writeFile(path.join(run,file),Buffer.from(result.data,'base64'));}finally{await session.detach();}}
+async function assertUserData(f){assert.deepEqual(await fs.readFile(path.join(f.data,'settings.json')),f.settingsBytes);assert.equal(await fs.readFile(path.join(f.data,'user-marker.txt'),'utf8'),'unchanged user data');for(const game of ['zzz','endfield'])assert.equal(await fs.readFile(path.join(f.settings.games[game].modsDirectory,'KeepMe','main.ini'),'utf8'),'; user Mod bytes stay intact\n[TextureOverride]\nhash=abcdef01');}
+async function connectRestart(f){
+ await waitFor(async()=>{try{const response=await fetch(`http://127.0.0.1:${f.debugPort}/json/version`);return response.ok;}catch{return false;}});
+ browser=await chromium.connectOverCDP(`http://127.0.0.1:${f.debugPort}`);const page=await waitFor(async()=>browser.contexts()[0]?.pages().find(page=>page.url().includes('index.html')));await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('heading',{name:'管理器更新',exact:true}).waitFor();return page;
+}
+async function stopRestart(page){const pid=replacementPid;await page.evaluate(()=>window.kmm.quit());await waitFor(async()=>{try{process.kill(pid,0);return false;}catch{return true;}});await browser?.close();browser=null;replacementPid=null;}
+try {
+ const f=await setup('正常更新');const panel=f.page.locator('.app-update-panel');
+ mode='offline';await panel.getByRole('button',{name:'检查更新',exact:true}).click();await panel.getByRole('alert').filter({hasText:'503'}).waitFor();await assertUserData(f);mode='good';
+ await panel.getByRole('button',{name:'检查更新',exact:true}).click();await panel.getByRole('heading',{name:`发布版本 ${newReport.version}`,exact:true}).waitFor();assert.equal(await f.page.evaluate(()=>window.__unsafe),undefined);assert.equal(await panel.locator('.update-notes').textContent(),info.notes);
+ await choice(0);await panel.getByRole('button',{name:'下载更新',exact:true}).click();await panel.getByText('已取消下载。',{exact:true}).waitFor();assert.equal((await app.evaluate(()=>globalThis.__updateDialogs))[0].title,'下载管理器更新');
+ mode='corrupt';await choice(1);await panel.getByRole('button',{name:'下载更新',exact:true}).click();await panel.getByRole('alert').filter({hasText:/长度|SHA256/}).waitFor();assert.equal(JSON.parse(await fs.readFile(path.join(f.install,'resources/app/package.json'),'utf8')).version,oldReport.version);await assertUserData(f);
+ mode='good';await panel.getByRole('button',{name:'检查更新',exact:true}).click();await panel.getByText(`发现新版本 ${newReport.version}。`,{exact:true}).waitFor();await panel.getByRole('button',{name:'下载更新',exact:true}).click();await panel.getByRole('button',{name:'退出并安装更新',exact:true}).waitFor({timeout:90000});
+ await choice(0);await panel.getByRole('button',{name:'退出并安装更新',exact:true}).click();await panel.getByText('已取消安装，更新包保留。',{exact:true}).waitFor();assert.equal((await f.page.evaluate(()=>window.kmm.appUpdateStatus())).value.stage,'ready');
+ assert.equal(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isVisible()),true);await screenshot(f.page,'before-install.png');await choice(1);const exited=app.process().exited;await panel.getByRole('button',{name:'退出并安装更新',exact:true}).click();await exited;app=null;
+ const resultFile=path.join(f.data,'app-updates','last-update.json');const result=await waitFor(async()=>{try{const value=JSON.parse(await fs.readFile(resultFile,'utf8'));return value.stage==='success'?value:null;}catch{return null;}});const transaction=(await fs.readdir(f.directory)).find(name=>name.startsWith('.kmm-update-'));replacementPid=JSON.parse(await fs.readFile(path.join(f.directory,transaction,'started.json'),'utf8')).pid;
+ assert.equal(JSON.parse(await fs.readFile(path.join(f.install,'resources/app/package.json'),'utf8')).version,newReport.version);assert.equal(JSON.parse(await fs.readFile(path.join(result.backup,'resources/app/package.json'),'utf8')).version,oldReport.version);await assertUserData(f);
+ const restarted=await connectRestart(f);await restarted.locator('.app-update-panel').getByText(`当前版本 ${newReport.version}`,{exact:false}).waitFor();await screenshot(restarted,'after-install.png');await stopRestart(restarted);
+ outcomes.push('real packaged 0.0.0 -> 0.0.1: UI, native confirm/cancel, loopback download, corrupt rejection, old exit, directory replacement, new visible window and startup ack; both-game Mod bytes/settings preserved');
+
+ // A completely verified package whose executable cannot start exercises actual helper rollback.
+ const badParent=path.join(run,'bad-release');const badRoot=path.join(badParent,`KiriuModsManager-${newReport.version}-win-x64`);await fs.cp(newReport.directory,badRoot,{recursive:true});await fs.writeFile(path.join(badRoot,'KiriuModsManager.exe'),'not a Windows executable');const packageManifest=JSON.parse(await fs.readFile(path.join(badRoot,'kmm-package.json'),'utf8'));packageManifest.files['KiriuModsManager.exe']=createHash('sha256').update('not a Windows executable').digest('hex');await fs.writeFile(path.join(badRoot,'kmm-package.json'),JSON.stringify(packageManifest));servedArchive=path.join(badParent,'bad-update.zip');await promisify(execFile)(path7z,['a','-tzip','-mx=1',servedArchive,path.basename(badRoot)],{cwd:badParent,windowsHide:true,timeout:300000,maxBuffer:1024**2});const bytes=await fs.readFile(servedArchive);info={...info,size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
+ const rollback=await setup('失败回退');await choice(1);value(await rollback.page.evaluate(()=>window.kmm.checkAppUpdate()));value(await rollback.page.evaluate(()=>window.kmm.downloadAppUpdate()));const rollbackExit=app.process().exited;value(await rollback.page.evaluate(()=>window.kmm.installAppUpdate()));await rollbackExit;app=null;
+ const rollbackResult=await waitFor(async()=>{try{const result=JSON.parse(await fs.readFile(path.join(rollback.data,'app-updates','last-update.json'),'utf8'));return result.stage==='rolled-back'?result:null;}catch{return null;}});assert.equal(JSON.parse(await fs.readFile(path.join(rollback.install,'resources/app/package.json'),'utf8')).version,oldReport.version);await assertUserData(rollback);
+ const oldPage=await connectRestart(rollback);
+ // Get the relaunched old PID from the browser endpoint's dedicated process query.
+ const browserSession=await browser.newBrowserCDPSession();const processes=await browserSession.send('SystemInfo.getProcessInfo');replacementPid=processes.processInfo.find(p=>p.type==='browser').id;
+ await screenshot(oldPage,'rollback.png');await stopRestart(oldPage);outcomes.push('verified invalid EXE: real helper replacement attempt fails, old directory restored and old visible App restarts; user files unchanged');
+ assert.deepEqual(errors,[]);await fs.writeFile(path.join(run,'report.json'),JSON.stringify({pass:true,run,outcomes,errors,source:'isolated HTTP fixture behind test-only privileged net.fetch mapping; no live release downloaded',rollback:rollbackResult,normal:result},null,2));console.log(JSON.stringify({pass:true,run,outcomes},null,2));
+}catch(error){await fs.writeFile(path.join(run,'report.json'),JSON.stringify({pass:false,run,outcomes,errors,error:error.stack},null,2));console.error(error);process.exitCode=1;}
+finally{if(app)await app.close().catch(()=>{});if(browser){try{await browser.contexts()[0].pages()[0].evaluate(()=>window.kmm.quit());}catch{}await browser.close().catch(()=>{});}await new Promise(resolve=>server.close(resolve));}

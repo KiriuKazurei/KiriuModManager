@@ -1,0 +1,709 @@
+{
+  "source": "qaqmanager v4.7.8 local reference resource portraits; artwork is not authored by KiriuModsManager; originals preserved",
+  "entries": [
+    {
+      "game": "zzz",
+      "name": "男主",
+      "file": "zzz/c35d7ab8f637db4d5a8a3a26.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/男主/_cover.webp",
+      "sha256": "8efc503d95c4a250c3e267a27c8afc8f7d68e45312bfe1cc5d1d5e2232beedab",
+      "bytes": 153416
+    },
+    {
+      "game": "zzz",
+      "name": "女主",
+      "file": "zzz/0a4e48d6e2df1c5cdcd9d901.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/女主/_cover.webp",
+      "sha256": "d4d336179fe2af5b83a34b092e892766eb7876327daf3395a40181c06060535b",
+      "bytes": 145744
+    },
+    {
+      "game": "zzz",
+      "name": "安比",
+      "file": "zzz/a436759ba082e026acf2f5b6.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/安比/_cover.webp",
+      "sha256": "02abdb6f2ad49e4d91b465c9fc8e1dc8e261751e9bf826adb1e2accb92304fda",
+      "bytes": 30842
+    },
+    {
+      "game": "zzz",
+      "name": "零号·安比",
+      "file": "zzz/48147610fe419c6f0ad25124.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/零号·安比/_cover.webp",
+      "sha256": "71cc1f3c8f577b8a160c93a76a6ad498113da48e3993ae9a45d0e72f6060f5a4",
+      "bytes": 50354
+    },
+    {
+      "game": "zzz",
+      "name": "安东",
+      "file": "zzz/141823906b7cc6b4a8d67ef9.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/安东/_cover.webp",
+      "sha256": "5f2d6203a74cab5d259ef8e49b369276c0dbdd5644caf6f49dc3f4fbc3184a6b",
+      "bytes": 47260
+    },
+    {
+      "game": "zzz",
+      "name": "本",
+      "file": "zzz/83831c3f910cf940c6612b86.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/本/_cover.webp",
+      "sha256": "743637618ea449140c68d6208f143e20d5f4ca43f6357db6a48d13b9b48d1789",
+      "bytes": 32712
+    },
+    {
+      "game": "zzz",
+      "name": "比利",
+      "file": "zzz/c33372fb624c31aae7c178ba.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/比利/_cover.webp",
+      "sha256": "38931df0004fb21f15ca186a1df3f5e2ec2b9110100c619ff741fb73b4933ca5",
+      "bytes": 48792
+    },
+    {
+      "game": "zzz",
+      "name": "可琳",
+      "file": "zzz/05d95843648016b7ebac7572.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/可琳/_cover.webp",
+      "sha256": "f0b5b39ca58b9805d685890c8d851090d76cce9a73f74d820ef5b475ff029b2a",
+      "bytes": 36664
+    },
+    {
+      "game": "zzz",
+      "name": "格莉丝",
+      "file": "zzz/c1935f492520b1be65cea7de.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/格莉丝/_cover.webp",
+      "sha256": "1c51c4bda601ef4ef29c278fa6b440eb339b001bec40b46a272905ef00d745ba",
+      "bytes": 42904
+    },
+    {
+      "game": "zzz",
+      "name": "珂蕾妲",
+      "file": "zzz/6f730955ca345da3aa44fbc2.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/珂蕾妲/_cover.webp",
+      "sha256": "b4da9e5ddfa6ef5a973352332d18efa1a458d2f228a1f0116c6415ebdb9d0ad5",
+      "bytes": 35444
+    },
+    {
+      "game": "zzz",
+      "name": "猫又",
+      "file": "zzz/c7a4ff6a45e5a1830d6cb966.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/猫又/_cover.webp",
+      "sha256": "013b584f6e8e530df4f571c9bf27e57a297a45a6ce5c746f7eaedc87ca3bae7c",
+      "bytes": 51892
+    },
+    {
+      "game": "zzz",
+      "name": "妮可",
+      "file": "zzz/b0bc710c2a7fb596338ee926.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/妮可/_cover.webp",
+      "sha256": "8e2b9d27a3104215152c2471eb162cbdac31c445b8c5e30c4f6870372180c18c",
+      "bytes": 36150
+    },
+    {
+      "game": "zzz",
+      "name": "艾莲",
+      "file": "zzz/e4107ae79a5e3acb44f470fe.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/艾莲/_cover.webp",
+      "sha256": "cdfcf81e513a31b67b187942cd19dbaddff693974f07015a3029382cdf893dd0",
+      "bytes": 37408
+    },
+    {
+      "game": "zzz",
+      "name": "苍角",
+      "file": "zzz/83fbed21cccadf30a367aefd.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/苍角/_cover.webp",
+      "sha256": "903978d2728363bcd04f54c53ebd97364d313a56feb5079b8d7b64d018250c2e",
+      "bytes": 60314
+    },
+    {
+      "game": "zzz",
+      "name": "莱卡恩",
+      "file": "zzz/cae04188dacfaad9607bbbf7.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/莱卡恩/_cover.webp",
+      "sha256": "79d9af3665744f2bcde03e93bba698b8561061775cff4838e115fe4e348a0edf",
+      "bytes": 28618
+    },
+    {
+      "game": "zzz",
+      "name": "丽娜",
+      "file": "zzz/dcd4db01b944a9ab06be0ffc.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/丽娜/_cover.webp",
+      "sha256": "3f28d5e24afced5c4fb99398cd562215da147c1f16b7b5dbf17d5872a1529f56",
+      "bytes": 31200
+    },
+    {
+      "game": "zzz",
+      "name": "11号",
+      "file": "zzz/e2c9674d047ba97b53b96de2.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/11号/_cover.webp",
+      "sha256": "90bfd5c4d504c76394b16998b0ef192a866cc510538922bc1125b89c0f55e949",
+      "bytes": 34880
+    },
+    {
+      "game": "zzz",
+      "name": "朱鸢",
+      "file": "zzz/fa5ec1f5eeb1cba6f81edcf1.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/朱鸢/_cover.webp",
+      "sha256": "4be94b0756466abdb131251a394cd5a0fbf0864d1b20a7b99772cc6246f8b3f3",
+      "bytes": 46968
+    },
+    {
+      "game": "zzz",
+      "name": "青衣",
+      "file": "zzz/5d22590688ceb0b15392b334.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/青衣/_cover.webp",
+      "sha256": "5376c2594908574fff004d06a269886521ab5f8e662d0b4001e431cbec061485",
+      "bytes": 64662
+    },
+    {
+      "game": "zzz",
+      "name": "简",
+      "file": "zzz/b705055f6f2e550dc709a761.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/简/_cover.webp",
+      "sha256": "03fedaea04eea5dc326880e87ab294d1517f3af18e41c802fc52f81a423cf7b1",
+      "bytes": 66580
+    },
+    {
+      "game": "zzz",
+      "name": "赛斯",
+      "file": "zzz/11052efc72ab29c1506a0e0f.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/赛斯/_cover.webp",
+      "sha256": "f48bc1e69ef83c9e6df603540e1d1d65b194c23f60a54040421fc67dec3c7273",
+      "bytes": 50740
+    },
+    {
+      "game": "zzz",
+      "name": "露西",
+      "file": "zzz/8a3de76e7b21a4d08066dfdd.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/露西/_cover.webp",
+      "sha256": "7d977a7b07fc5122cb4cae75a4623cc76f3936e46a2434191a6072e368e44d24",
+      "bytes": 37658
+    },
+    {
+      "game": "zzz",
+      "name": "派派",
+      "file": "zzz/8c070d57ab1f537d26234118.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/派派/_cover.webp",
+      "sha256": "ef3f869ff2d655148eea272d1e64cc5078c46213303aae1caa733e33d0505c81",
+      "bytes": 38586
+    },
+    {
+      "game": "zzz",
+      "name": "凯撒",
+      "file": "zzz/66fcd43b053ce60995dcbc76.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/凯撒/_cover.webp",
+      "sha256": "e3cf2fd3104c49b4cdc0758b84f4187435db46ddf4e6a84c83c1608502914ee7",
+      "bytes": 69818
+    },
+    {
+      "game": "zzz",
+      "name": "柏妮思",
+      "file": "zzz/ec800bce05bbb9d72907a947.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/柏妮思/_cover.webp",
+      "sha256": "b10d2eed21cb2156d0eeb0ab7fc108d6c5b871195f20020075b100729e9ba050",
+      "bytes": 86868
+    },
+    {
+      "game": "zzz",
+      "name": "耀嘉音",
+      "file": "zzz/08b0ebc6e94635c57e496ec7.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/耀嘉音/_cover.webp",
+      "sha256": "f1d2e37f126c0a3235c9f7200a72c4cff62c72337a876bb0e9639548f3a8d575",
+      "bytes": 39350
+    },
+    {
+      "game": "zzz",
+      "name": "雅",
+      "file": "zzz/601294fb8c7e64d53cba21dd.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/雅/_cover.webp",
+      "sha256": "2d22628313eb101d0216201d9e11139f1a082262d9087d439c592f534c9ecae1",
+      "bytes": 39598
+    },
+    {
+      "game": "zzz",
+      "name": "悠真",
+      "file": "zzz/4a6121d2abaac8b4080a8b43.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/悠真/_cover.webp",
+      "sha256": "fa25c89c6d5fe6314bc58742cb63e743fa40da10c58566a9270378fa79e4af48",
+      "bytes": 40700
+    },
+    {
+      "game": "zzz",
+      "name": "伊芙琳",
+      "file": "zzz/531b36eb673df6bd4cb1ab1e.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/伊芙琳/_cover.webp",
+      "sha256": "9318c504f672bd6dd728e203ec72899ad09df42a861f33d77b0a96ba27dcc78f",
+      "bytes": 39154
+    },
+    {
+      "game": "zzz",
+      "name": "仪玄",
+      "file": "zzz/fa759b11f53d778c4dad0848.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/仪玄/_cover.png",
+      "sha256": "f23682626577b80b6637180e3855eda77ceacf166dcb4e0bb5d949eeb678866a",
+      "bytes": 170455
+    },
+    {
+      "game": "zzz",
+      "name": "橘福福",
+      "file": "zzz/e4b2bfd06d5cfcf385703338.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/橘福福/_cover.png",
+      "sha256": "ddac63cfaa0471526d47a503521a848b66cbb18b0380fc6d2edbf2c3a34867ec",
+      "bytes": 202410
+    },
+    {
+      "game": "zzz",
+      "name": "扳机",
+      "file": "zzz/24da9806e40ee5f669d5811a.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/扳机/_cover.webp",
+      "sha256": "47592b171bb615b8cbde228f74dd01f29a8885ab8347d93687f6ef8ff4091328",
+      "bytes": 48012
+    },
+    {
+      "game": "zzz",
+      "name": "薇薇安",
+      "file": "zzz/d24d4d248ed27c5c190a36db.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/薇薇安/_cover.webp",
+      "sha256": "e6dda6af7f0196540805ca854f75a4dd476ce2c1362a800432f7ecf1c7ddab09",
+      "bytes": 39142
+    },
+    {
+      "game": "zzz",
+      "name": "雨果",
+      "file": "zzz/553daff18fda62d026c1aed1.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/雨果/_cover.png",
+      "sha256": "96b7847c9dc4dbd46f0042a6d6c70bf624cd2eaa86b97957c9724ef5743ef759",
+      "bytes": 38060
+    },
+    {
+      "game": "zzz",
+      "name": "柚叶",
+      "file": "zzz/f67dfd5bc16d590e8d67213d.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/柚叶/_cover.png",
+      "sha256": "2b0cc31f9f38a4b57e5123f536a19bb4dc83306ebf36a5610509d610085dd108",
+      "bytes": 148521
+    },
+    {
+      "game": "zzz",
+      "name": "爱丽丝",
+      "file": "zzz/cf2c6c2759201f1eb54e800f.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/爱丽丝/_cover.png",
+      "sha256": "af89a9f186dcf6dc7cfd9c0dbbbdf8fe8095580c92ec2b68c216ffc017d07e3f",
+      "bytes": 157312
+    },
+    {
+      "game": "zzz",
+      "name": "席德",
+      "file": "zzz/9daaf4c21cf8278d03b69510.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/席德/_cover.png",
+      "sha256": "030da3cbecf401bc9d688e2d49d883520067d0210610db3643b9ea822521ca5c",
+      "bytes": 34584
+    },
+    {
+      "game": "zzz",
+      "name": "奥菲丝&鬼火",
+      "file": "zzz/e74b94a57c26b9963cddb973.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/奥菲丝&鬼火/_cover.png",
+      "sha256": "3f8e2261292293f2f97e9ce8cb067a04bedf83347ad479422076d9037062d7a5",
+      "bytes": 41130
+    },
+    {
+      "game": "zzz",
+      "name": "潘引壶",
+      "file": "zzz/a4c45e0ecd72d99e2ba32a40.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/潘引壶/_cover.png",
+      "sha256": "a7d15373715b0ada7b85b5b4b4da424c5ad6f543db6c12abc721a9604ffdb87d",
+      "bytes": 132093
+    },
+    {
+      "game": "zzz",
+      "name": "真斗",
+      "file": "zzz/8a8e92ef8db42f64c9fd597f.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/真斗/_cover.webp",
+      "sha256": "3659038661422bb579df10fec66d590d0969733d62893c88cf7bbca2ea586228",
+      "bytes": 36734
+    },
+    {
+      "game": "zzz",
+      "name": "卢西娅",
+      "file": "zzz/b520b48c45c761ebcd72e63c.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/卢西娅/_cover.webp",
+      "sha256": "dc59dbaf417ec90abdccf3749eed103dc4dba81c37a85e1c309d48915c46586f",
+      "bytes": 37232
+    },
+    {
+      "game": "zzz",
+      "name": "伊德海莉",
+      "file": "zzz/dd375c924454f4b76d99e07d.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/伊德海莉/_cover.webp",
+      "sha256": "55277d025b1927282794eaf28d46b27b8754c92677c01cd0eeaec32ea8d1553a",
+      "bytes": 32690
+    },
+    {
+      "game": "zzz",
+      "name": "般岳",
+      "file": "zzz/79d3decb0cc37944f12abe7b.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/般岳/_cover.webp",
+      "sha256": "6ed6632cda8e7692a2eeff9252b5a71ac8c26281b95a160adc7bfade8a448eb0",
+      "bytes": 19926
+    },
+    {
+      "game": "zzz",
+      "name": "叶瞬光",
+      "file": "zzz/ceafb0cde9089410b9e10ce3.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/叶瞬光/_cover.webp",
+      "sha256": "dd31fec1c4461c08c4f47cf9144faa3d86e24a7bd59627d22d1c426c917b94c4",
+      "bytes": 11246
+    },
+    {
+      "game": "zzz",
+      "name": "照",
+      "file": "zzz/d6578de029fac6b423d06b12.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/照/_cover.webp",
+      "sha256": "4948cbdc68b379a2707104c6baef1759af528d7c4d4b1209ebd68cf2c04d36ec",
+      "bytes": 13278
+    },
+    {
+      "game": "zzz",
+      "name": "爱芮",
+      "file": "zzz/7532b60e2761e02d6dc3c54d.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/爱芮/_cover.webp",
+      "sha256": "c6f69931d288cae6022577122ec617453d6bb589ac569acf5178a4d0a6045250",
+      "bytes": 36452
+    },
+    {
+      "game": "zzz",
+      "name": "千夏",
+      "file": "zzz/bb6e9a9aa36a8c8c6d26b799.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/千夏/_cover.webp",
+      "sha256": "062f1511f95b2f8f72f5ee1878c99179d247a4bbfd59d0996821b9db242bd58d",
+      "bytes": 35800
+    },
+    {
+      "game": "zzz",
+      "name": "南宫羽",
+      "file": "zzz/c5b24808f7c038344bad35e7.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/南宫羽/_cover.webp",
+      "sha256": "bbaa406a908fc4b66ab697aa6abbbb116814130bee2baabd16f2f7c4bf94b62a",
+      "bytes": 35390
+    },
+    {
+      "game": "zzz",
+      "name": "希希芙",
+      "file": "zzz/d0e2cc5f2dd236fd25e1bf2a.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/希希芙/_cover.webp",
+      "sha256": "22d842131b06d3f1f6753332683998e377188b975265d836a9c91dec1aabf53f",
+      "bytes": 41132
+    },
+    {
+      "game": "zzz",
+      "name": "普罗米娅",
+      "file": "zzz/087cc23afea78aacdeec13c9.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/普罗米娅/_cover.png",
+      "sha256": "e924a6ba532c103c79de6000e2e6c0646eaf077210093efdb5a7b3a490a884e7",
+      "bytes": 437132
+    },
+    {
+      "game": "zzz",
+      "name": "维琳娜",
+      "file": "zzz/8cad390dbf61e8ea36d76bab.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/维琳娜/_cover.png",
+      "sha256": "30b85c58c901b683c8f98cb16b6964330a093c7f7bac484c30963947ce9e2087",
+      "bytes": 324266
+    },
+    {
+      "game": "zzz",
+      "name": "诺姆",
+      "file": "zzz/d13927d3e2bf68efa041ae38.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/诺姆/_cover.png",
+      "sha256": "bbc497f49c720426ce20b25509d40710a577d7ada97f1871e714625d7ac1b5a2",
+      "bytes": 431968
+    },
+    {
+      "game": "zzz",
+      "name": "柳",
+      "file": "zzz/ee222b9d0f8aaab823743d9f.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/柳/_cover.webp",
+      "sha256": "b1433df5397075dfacf0cf3d3d9c585b56cfd1668ed438e5dd6414107efdbb76",
+      "bytes": 27134
+    },
+    {
+      "game": "zzz",
+      "name": "波可娜",
+      "file": "zzz/9f8c06e8f7233f91c8c2e2fc.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/波可娜/_cover.webp",
+      "sha256": "5e70c2f2cbf912902b6766bd368af94e46ec72e9d30a6391782828477457f944",
+      "bytes": 46288
+    },
+    {
+      "game": "zzz",
+      "name": "琉音",
+      "file": "zzz/211e814c8b081fcddf72c7c5.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/琉音/_cover.webp",
+      "sha256": "22884ed35d8ea6a5d0293b8edc6aaee147f802270bdb2e9ab7a381a1ff4ebfda",
+      "bytes": 59836
+    },
+    {
+      "game": "zzz",
+      "name": "莱特",
+      "file": "zzz/5fc1ea0739ca18205e23fa95.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/莱特/_cover.webp",
+      "sha256": "182c3c458138510a25dc2f83cde7c59bab9414f3095683ea41e722d87ed77d2d",
+      "bytes": 52882
+    },
+    {
+      "game": "zzz",
+      "name": "佩洛伊斯",
+      "file": "zzz/52f7a4a0755b9db9716c40eb.webp",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/zzz/佩洛伊斯/_cover.webp",
+      "sha256": "410233c0ef5e991487688c260270c00c2ed2e93b4eb3b06423ffe2ca96200a90",
+      "bytes": 351700
+    },
+    {
+      "game": "endfield",
+      "name": "汤汤",
+      "file": "endfield/2aee7067a90bf863d92bbef1.jpg",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/汤汤/_cover.jpg",
+      "sha256": "032102205bb639b450256429e13bacf641292f622086ad0da5b57881c9a2827f",
+      "bytes": 530354
+    },
+    {
+      "game": "endfield",
+      "name": "洛茜",
+      "file": "endfield/adc74236cd128c9de9c36bf6.jpg",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/洛茜/_cover.jpg",
+      "sha256": "32c6850db9b38f9da75b3ece18cc2f7ad1055b3f3967320923aa5cc70a752499",
+      "bytes": 570302
+    },
+    {
+      "game": "endfield",
+      "name": "男主",
+      "file": "endfield/c35d7ab8f637db4d5a8a3a26.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/男主/_cover.png",
+      "sha256": "dde5e675f172d3e1d5e9750cd82eba561453563a3421dbfe076c66bbaea744c2",
+      "bytes": 32218
+    },
+    {
+      "game": "endfield",
+      "name": "女主",
+      "file": "endfield/0a4e48d6e2df1c5cdcd9d901.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/女主/_cover.png",
+      "sha256": "d8cda23d8f5a087673149c249fd7ae6f9053212043d954af5e6239fd6f2a29ff",
+      "bytes": 33744
+    },
+    {
+      "game": "endfield",
+      "name": "佩丽卡",
+      "file": "endfield/ffa32187cfda06d7e14d1492.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/佩丽卡/_cover.png",
+      "sha256": "9120c4b3b32b9f37da8ddceea13df376227981230a6c9158c4f948e0b34c7030",
+      "bytes": 40909
+    },
+    {
+      "game": "endfield",
+      "name": "陈千语",
+      "file": "endfield/cb00f6be4b7c1161f0a9e939.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/陈千语/_cover.png",
+      "sha256": "7f0dbbd5189de60aac4a5ac1ad0c260115cd8a313a78257195695d899b5da986",
+      "bytes": 32615
+    },
+    {
+      "game": "endfield",
+      "name": "莱万汀",
+      "file": "endfield/ca24ddb221cd9439ed285600.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/莱万汀/_cover.png",
+      "sha256": "790571ef3aaf2f96b6308afcbe72f07e52caa4d05ec54a12f15751cea26c4b07",
+      "bytes": 33222
+    },
+    {
+      "game": "endfield",
+      "name": "伊冯",
+      "file": "endfield/b22593fc330896a31b0a653e.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/伊冯/_cover.png",
+      "sha256": "82a5aaf45b9b27fb76bb9f1be46c374351806c3cba2bfc8afafe4f4da7e63673",
+      "bytes": 39536
+    },
+    {
+      "game": "endfield",
+      "name": "洁尔佩塔",
+      "file": "endfield/a6c2bb864e9021131b704784.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/洁尔佩塔/_cover.png",
+      "sha256": "15c58f179b3225a2988d0597be447f8f46df735bc57497400e1bee9ea6855f40",
+      "bytes": 41305
+    },
+    {
+      "game": "endfield",
+      "name": "艾尔黛拉",
+      "file": "endfield/be2ab7a329bc1430f295ca86.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/艾尔黛拉/_cover.png",
+      "sha256": "71adefe5cadbcc6623a2ad80bd13f436282d4b1e34fe0f3666cec365ee3a6735",
+      "bytes": 36615
+    },
+    {
+      "game": "endfield",
+      "name": "余烬",
+      "file": "endfield/c87800f628b7609c2d2ccd4d.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/余烬/_cover.png",
+      "sha256": "1109e27bb2836c3c0399d2b9a5c4c8b597a0c6527f200fa0577c50f3b2888f04",
+      "bytes": 38261
+    },
+    {
+      "game": "endfield",
+      "name": "别礼",
+      "file": "endfield/af71c8d9c628d1d48d990755.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/别礼/_cover.png",
+      "sha256": "6276f89e991ec5c8e79da1e4549dbf49a67646947a61f8d5f5764246d87d25e7",
+      "bytes": 37965
+    },
+    {
+      "game": "endfield",
+      "name": "黎风",
+      "file": "endfield/0e2f77096858159cd25f2abb.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/黎风/_cover.png",
+      "sha256": "ab9adb695c07f48a041582a93b946872b197809294a92c1a40055b6ced3e533c",
+      "bytes": 29472
+    },
+    {
+      "game": "endfield",
+      "name": "骏卫",
+      "file": "endfield/2c69ad779274ccf675c37f6e.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/骏卫/_cover.png",
+      "sha256": "99afceba88c59c98709ae938ecaf59ff428e6ee9c1c41e2533c8bb63ca370584",
+      "bytes": 33912
+    },
+    {
+      "game": "endfield",
+      "name": "阿列什",
+      "file": "endfield/75595855c2e07da03a28e5a0.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/阿列什/_cover.png",
+      "sha256": "d8080c0a5fea90610503e260454b6485debcea39495ebdb46eace45c24122107",
+      "bytes": 36310
+    },
+    {
+      "game": "endfield",
+      "name": "弧光",
+      "file": "endfield/39fd78a8b042b4265d46d5b4.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/弧光/_cover.png",
+      "sha256": "a5da48a5022d13d02bb039436558b2ea5ad152d0771f831e65a712f5a5f8f80c",
+      "bytes": 30696
+    },
+    {
+      "game": "endfield",
+      "name": "艾维文娜",
+      "file": "endfield/f6a37a30ce7b2b27c2f4c579.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/艾维文娜/_cover.png",
+      "sha256": "2dd69d710828dfb532fdd6ff058c86fc5ebd5a21729bf81af7e6f33b24213c7b",
+      "bytes": 35387
+    },
+    {
+      "game": "endfield",
+      "name": "大潘",
+      "file": "endfield/187b48153fd1aeda9fefce0d.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/大潘/_cover.png",
+      "sha256": "1337d0c7ee51b92a155f1dad8c853dc555557815c781da6d8f99215622e5154f",
+      "bytes": 29425
+    },
+    {
+      "game": "endfield",
+      "name": "昼雪",
+      "file": "endfield/6bb20b19538ba1755812d450.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/昼雪/_cover.png",
+      "sha256": "c48bf55496eec9d269d0aae1ab73d77a5b13806fe4c00c0353c7dfdc92136c2e",
+      "bytes": 37519
+    },
+    {
+      "game": "endfield",
+      "name": "狼卫",
+      "file": "endfield/76e6477ddec83c9479988fb8.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/狼卫/_cover.png",
+      "sha256": "e4841e95d4cc89054570a71d5fea8a74beaa39f14a158273171826f38e461301",
+      "bytes": 33908
+    },
+    {
+      "game": "endfield",
+      "name": "赛希",
+      "file": "endfield/b32ff18314e23506f39f4ed3.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/赛希/_cover.png",
+      "sha256": "212c4c7afded133f5b89cb7c972331d0ca20ea7b1e4ab07faef565e303301cff",
+      "bytes": 41167
+    },
+    {
+      "game": "endfield",
+      "name": "秋栗",
+      "file": "endfield/c1775a13fc80dd866f9ab8e1.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/秋栗/_cover.png",
+      "sha256": "5419794351f96a44121387dddc60188f99a88fbcbb2f9932e7ad7ddfd45f4265",
+      "bytes": 31938
+    },
+    {
+      "game": "endfield",
+      "name": "安塔尔",
+      "file": "endfield/499c5a08685c7b6ddf242ceb.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/安塔尔/_cover.png",
+      "sha256": "e26f2e95b12af84cdb5fa5fa280710ea1d47a9ac768606de41203582b44b9244",
+      "bytes": 27526
+    },
+    {
+      "game": "endfield",
+      "name": "卡契尔",
+      "file": "endfield/6ea5e85090da478810a24b5e.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/卡契尔/_cover.png",
+      "sha256": "2a4555190ce1b8176cec349353243ab8a112fb284a9883bc73e45343673c4e11",
+      "bytes": 26957
+    },
+    {
+      "game": "endfield",
+      "name": "埃特拉",
+      "file": "endfield/98c0e9740458ad96b52f1c8a.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/埃特拉/_cover.png",
+      "sha256": "11769c7f449536ed8821db373a1f2f450650701f911d850ad12dbb94b271b81e",
+      "bytes": 23679
+    },
+    {
+      "game": "endfield",
+      "name": "萤石",
+      "file": "endfield/2cf6f1b72473308193443675.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/萤石/_cover.png",
+      "sha256": "4ad1410157efa9cab84d413ffd126daf427fc6d349fa82afa78d28f3249a858f",
+      "bytes": 31935
+    },
+    {
+      "game": "endfield",
+      "name": "庄方宜",
+      "file": "endfield/a072bd87b762644e50ef8e85.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/庄方宜/_cover.png",
+      "sha256": "a426ed9ccfbf69316728a341991de500bd3cb9a1f18f7caba027b2d41c077a84",
+      "bytes": 531430
+    },
+    {
+      "game": "endfield",
+      "name": "弭弗",
+      "file": "endfield/0e586f4f3b8d355eac1cade5.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/弭弗/_cover.png",
+      "sha256": "db6ad912628510209920f261af0262fabf6b74de8f4797b27c29afbe4c5bbb29",
+      "bytes": 560319
+    },
+    {
+      "game": "endfield",
+      "name": "卡繆",
+      "file": "endfield/acf1b952be37e4e5ea89c3e6.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/卡繆/_cover.png",
+      "sha256": "08a4e5775206a166255653dd5af28fe4f05e2b69ffdb208597f61be219498ec6",
+      "bytes": 441178
+    },
+    {
+      "game": "endfield",
+      "name": "诀",
+      "file": "endfield/1187b91dc5b972a91d52be4d.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/诀/_cover.png",
+      "sha256": "c521633e520d3cc6cd53860fd3feff87c9bafa55a4054d6162321e2509b66212",
+      "bytes": 70430
+    },
+    {
+      "game": "endfield",
+      "name": "梨诺",
+      "file": "endfield/4cb6e4cf5dc69cc161aacc16.png",
+      "source": "upstream/qaqmanager-v4.7.8/original/resources/images/endfield/梨诺/_cover.png",
+      "sha256": "e389e6b72ed71e759025d4c9d39416b6e9bec3d5f81e5391619bee20a8cde15b",
+      "bytes": 70011
+    }
+  ]
+}

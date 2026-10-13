@@ -1,0 +1,52 @@
+import type {DesktopAPI,Result} from './contracts';
+
+// Type-only correspondence: sandbox preload must not require this file at runtime.
+export interface IPCContracts {
+  'update:check':DesktopAPI['checkAppUpdate'];
+  'update:status':DesktopAPI['appUpdateStatus'];
+  'update:download':DesktopAPI['downloadAppUpdate'];
+  'update:install':DesktopAPI['installAppUpdate'];
+  'settings:read':DesktopAPI['readSettings'];
+  'settings:save':DesktopAPI['saveSettings'];
+  'settings:save-game-paths':DesktopAPI['saveGamePaths'];
+  'settings:save-desktop-preferences':DesktopAPI['saveDesktopPreferences'];
+  'directory:choose':DesktopAPI['chooseDirectory'];
+  'xxmi:inspect':DesktopAPI['inspect'];
+  'xxmi:deploy':DesktopAPI['deploy'];
+  'deployment:progress':DesktopAPI['deploymentProgress'];
+  'xxmi:sync':DesktopAPI['syncPaths'];
+  'runtime:check':DesktopAPI['checkRuntime'];
+  'runtime:download':DesktopAPI['openRuntimeDownload'];
+  'mods:scan':DesktopAPI['scanMods'];
+  'mods:operate':DesktopAPI['operateMod'];
+  'mods:import':DesktopAPI['importMods'];
+  'mods:replace':DesktopAPI['replaceMod'];
+  'mods:delete':DesktopAPI['deleteMod'];
+  'mods:cover':DesktopAPI['cover'];
+  'characters:covers':DesktopAPI['characterCovers'];
+  'characters:choose-cover':DesktopAPI['chooseCharacterCover'];
+  'mods:choose-cover':DesktopAPI['chooseCover'];
+  'mods:group':DesktopAPI['addGroup'];
+  'presets:list':DesktopAPI['presets'];
+  'presets:save':DesktopAPI['savePreset'];
+  'presets:delete':DesktopAPI['deletePreset'];
+  'presets:apply':DesktopAPI['applyPreset'];
+  'ini:list':DesktopAPI['iniFiles'];
+  'ini:read':DesktopAPI['readIni'];
+  'ini:save':DesktopAPI['saveIni'];
+  'conflicts:scan':DesktopAPI['conflicts'];
+  'recovery:list':DesktopAPI['recovery'];
+  'recovery:create':DesktopAPI['createBackup'];
+  'recovery:restore':DesktopAPI['restore'];
+  'desktop:status':DesktopAPI['desktopStatus'];
+  'desktop:floating':DesktopAPI['floating'];
+  'desktop:show':DesktopAPI['showMain'];
+  'desktop:quit':DesktopAPI['quit'];
+  'desktop:game':DesktopAPI['selectGame'];
+  'desktop:launch':DesktopAPI['launchXXMI'];
+  'desktop:refresh':DesktopAPI['refreshGame'];
+  'desktop:link':DesktopAPI['openLink'];
+}
+export type IPCChannel=keyof IPCContracts;
+export type IPCArguments<C extends IPCChannel>=Parameters<IPCContracts[C]>;
+export type IPCValue<C extends IPCChannel>=Awaited<ReturnType<IPCContracts[C]>> extends Result<infer V>?V:never;

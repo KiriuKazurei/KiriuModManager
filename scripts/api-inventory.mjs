@@ -1,0 +1,80 @@
+import ts from 'typescript';
+import {promises as fs} from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import assert from 'node:assert/strict';
+
+const root=path.resolve(fileURLToPath(new URL('..',import.meta.url)));
+const relative=file=>path.relative(root,file).replaceAll('\\','/');
+function walk(node,visit){visit(node);ts.forEachChild(node,child=>walk(child,visit));}
+const name=node=>ts.isIdentifier(node)||ts.isStringLiteral(node)?node.text:null;
+function source(file,text){const parsed=ts.createSourceFile(file,text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);assert.deepEqual(parsed.parseDiagnostics,[],'IPC parse error in '+file);return parsed;}
+function calls(node,callee){const results=[];walk(node,item=>{if(ts.isCallExpression(item)&&item.expression.getText()===callee)results.push(item);});return results;}
+function unique(values,label){assert.equal(new Set(values).size,values.length,'Duplicate '+label);}
+export function inspectRuntimeIPC(main,preload){
+  const m=source('index.js',main),p=source('preload.js',preload);
+  const handlers=calls(m,'handle').map(call=>{assert.ok(ts.isStringLiteral(call.arguments[0]));return call.arguments[0].text;}).sort();
+  const invokes=calls(p,'invoke').map(call=>{assert.ok(ts.isStringLiteral(call.arguments[0]));return call.arguments[0].text;}).sort();
+  for(const call of calls(p,'require')){assert.ok(ts.isStringLiteral(call.arguments[0]));assert.equal(call.arguments[0].text,'electron','Sandbox preload may only require Electron');}
+  unique(handlers,'runtime handlers');unique(invokes,'runtime invokes');return {handlers,invokes};
+}
+
+// Business semantics are reviewed metadata, paired with AST-derived actual signatures/registrations.
+const semantics={
+  checkAppUpdate:['none','none','Resolve saved HTTPS manifest or GitHub stable release; no download or downgrade'],appUpdateStatus:['none','none','Responsive update progress and previous helper result'],downloadAppUpdate:['value:null','none','Native confirmation before download; pinned size/SHA256 and complete package validation; source must match checked source'],installAppUpdate:['value:null','none','Native confirmation; drain file queue, revalidate packages and isolated install root; external helper waits for exit, retains old package and restarts'],
+  readSettings:['none','none','Read coordinated latest saved configuration'],
+  saveSettings:['none','none','Legacy complete replacement; concurrent stale full settings can overwrite newer fields'],
+  saveGamePaths:['none','none','Reject empty/unknown/type/path patch; queued latest-read merge of one game; selection retained'],
+  saveDesktopPreferences:['none','none','Reject empty/unknown/type/URL patch; queued latest-read desktop-only merge'],
+  chooseDirectory:['value:null','none','Native directory chooser'],inspect:['none','none','Inspect explicit game/root without persisting'],
+  deploy:['none','filesDeployed may be true while ready false','Official signature-verified deployment; runtime readiness is explicit'],deploymentProgress:['none','none','Responsive progress polling'],syncPaths:['none','none','Preserve external other-game/secrets/comments; backup before sync'],checkRuntime:['none','installed:false','Runtime status'],openRuntimeDownload:['none','none','Submit official browser request'],
+  scanMods:['none','warnings','Stable IDs and saved root; inference only for new records'],operateMod:['none','none','Validated toggle/physical rename/metadata-only/classify; collision rejected'],importMods:['value.canceled:true','importedIds and errors may both be nonempty','Native selected folders/ZIP/7z/RAR; refuse existing destination'],replaceMod:['value:null','none','Native selected content; retain old recovery copy/identity/user cover'],deleteMod:['value:null','none','Native confirm; move out of library with recovery copy'],cover:['none; null means no image','none','Mod image data URL'],characterCovers:['none','map may omit role','Default/custom role data URLs'],chooseCharacterCover:['value:null','none','Native PNG/JPEG chooser; reject preserves existing image'],chooseCover:['value:null','none','Native PNG/JPEG/WebP/GIF chooser'],addGroup:['none','none','Metadata group only; no directory created'],
+  presets:['none','none','Current root-scoped game presets'],savePreset:['none','none','Create/update validated stable-ID members; null members means current snapshot'],deletePreset:['none','none','Delete preset only; retain Mod files'],applyPreset:['none','issues and applied','Missing/blocked members reported while others processed; new nonmembers unchanged'],iniFiles:['none','none','Only Mod-local INI paths'],readIni:['none','none','Encoding/BOM/newline/digest/key identities'],saveIni:['none','none','Digest protection; encoded 4MiB bound before backup/write'],conflicts:['none','warnings','Enabled-only override hash candidates, not diagnosed rendering conflict'],recovery:['none','legacy entries may require manual retrieval','Current game recovery records'],createBackup:['none','none','Complete current-game content/settings/metadata/presets/role image snapshot'],restore:['value:null','none','Native confirm; preserve overwritten files; restore scope and game isolation'],
+  desktopStatus:['none','trayAvailable:false','Responsive window/tray status'],floating:['none','none','Create/close trusted floating window'],showMain:['none','none','Restore/show main window'],quit:['none','none','Request application exit'],selectGame:['none','none','Atomic latest settings merge selecting game'],launchXXMI:['none','none','Validated fixed launch plan; returned request is not game-ready proof'],refreshGame:['none','none','Only selected game process input; error without target'],openLink:['none','none','Validated HTTP(S), browser request not navigation-success proof'],
+};
+const awaitingCursor=new Set(['saveGamePaths','saveDesktopPreferences']);
+export async function deriveInventory(){
+  const config=ts.readConfigFile(path.join(root,'tsconfig.json'),ts.sys.readFile);assert.ok(!config.error);
+  const parsed=ts.parseJsonConfigFileContent(config.config,ts.sys,root);
+  const files=[...parsed.fileNames,...['src/main/index.ts','src/preload/index.ts'].map(file=>path.join(root,file))];
+  const program=ts.createProgram(files,{...parsed.options,noEmit:true});const checker=program.getTypeChecker();
+  const relevant=program.getSourceFiles().filter(sf=>['src/main/','src/preload/','src/shared/'].some(prefix=>relative(sf.fileName).startsWith(prefix)));
+  const diagnostics=[...program.getOptionsDiagnostics(),...relevant.flatMap(sf=>[...program.getSyntacticDiagnostics(sf),...program.getSemanticDiagnostics(sf)])];
+  assert.equal(diagnostics.length,0,ts.formatDiagnosticsWithColorAndContext(diagnostics,{getCanonicalFileName:file=>file,getCurrentDirectory:()=>root,getNewLine:()=> '\n'}));
+  const get=file=>{const sf=program.getSourceFile(path.join(root,file));assert.ok(sf,'Missing '+file);return sf;};
+  const contracts=get('src/shared/contracts.ts'),mapping=get('src/shared/ipc-contracts.ts'),preload=get('src/preload/index.ts'),main=get('src/main/index.ts');
+  const api=contracts.statements.find(node=>ts.isInterfaceDeclaration(node)&&node.name.text==='DesktopAPI');assert.ok(api);
+  const memberNames=api.members.map(method=>{assert.ok(ts.isMethodSignature(method));return name(method.name);});unique(memberNames,'DesktopAPI methods');
+  const methods=new Map(api.members.map(method=>[name(method.name),method]));
+  const ipc=mapping.statements.find(node=>ts.isInterfaceDeclaration(node)&&node.name.text==='IPCContracts');assert.ok(ipc);
+  const channelMethods=new Map();for(const member of ipc.members){assert.ok(ts.isPropertySignature(member)&&ts.isIndexedAccessTypeNode(member.type));assert.equal(member.type.objectType.getText(mapping),'DesktopAPI');assert.ok(ts.isLiteralTypeNode(member.type.indexType)&&ts.isStringLiteral(member.type.indexType.literal));const method=member.type.indexType.literal.text;assert.ok(methods.has(method));assert.notEqual(method,'onDesktopChange');const channel=name(member.name);assert.ok(!channelMethods.has(channel),'Duplicate mapping '+channel);channelMethods.set(channel,method);}
+  unique([...channelMethods.values()],'method mapping');
+  assert.deepEqual([...channelMethods.values()].sort(),[...methods.keys()].filter(method=>method!=='onDesktopChange').sort(),'Every async DesktopAPI method must have exactly one mapping');
+  const registrations=calls(main,'handle');const handlers=new Map();for(const call of registrations){assert.ok(ts.isStringLiteral(call.arguments[0]));const channel=call.arguments[0].text;assert.ok(!handlers.has(channel),'Duplicate handler '+channel);assert.ok(channelMethods.has(channel),'Unmapped handler '+channel);handlers.set(channel,call);}
+  assert.equal(handlers.size,channelMethods.size,'Mapped channel missing handler');
+  const properties=[];walk(preload,node=>{if(ts.isVariableDeclaration(node)&&name(node.name)==='api'){assert.ok(ts.isObjectLiteralExpression(node.initializer));properties.push(...node.initializer.properties);}});
+  const preloadMembers=new Map();for(const property of properties){assert.ok(ts.isPropertyAssignment(property));const method=name(property.name);assert.ok(methods.has(method),'Unknown preload method '+method);assert.ok(!preloadMembers.has(method));preloadMembers.set(method,property);}
+  assert.equal(preloadMembers.size,methods.size,'Missing preload member');
+  // Imports into sandbox preload must be erased; only Electron may be required at runtime.
+  for(const statement of preload.statements.filter(ts.isImportDeclaration)){if(statement.moduleSpecifier.text!=='electron')assert.equal(statement.importClause?.isTypeOnly,true,'Runtime shared import in sandbox preload');}
+  const consumers=new Map([...methods.keys()].map(method=>[method,[]]));const methodSymbols=new Map([...methods].map(([method,node])=>[checker.getSymbolAtLocation(node.name),method]));
+  for(const sf of program.getSourceFiles().filter(sf=>relative(sf.fileName).startsWith('src/renderer/'))){walk(sf,node=>{if(!ts.isPropertyAccessExpression(node))return;const symbol=checker.getSymbolAtLocation(node.name);const method=methodSymbols.get(symbol);if(method){const position=sf.getLineAndCharacterOfPosition(node.getStart(sf));consumers.get(method).push({file:relative(sf.fileName),line:position.line+1});}else if(ts.isPropertyAccessExpression(node.expression)&&node.expression.getText(sf)==='window.kmm')assert.fail('Unknown renderer API '+node.getText(sf));});}
+  const runtime=inspectRuntimeIPC(main.getFullText(),preload.getFullText());assert.deepEqual(runtime.handlers,[...channelMethods.keys()].sort());assert.deepEqual(runtime.invokes,runtime.handlers);
+  const rows=[];for(const [channel,method]of channelMethods){const declaration=methods.get(method),property=preloadMembers.get(method);const invocations=calls(property,'invoke');assert.equal(invocations.length,1,'Preload method must have one typed invoke: '+method);assert.equal(invocations[0].arguments[0].text,channel,'Wrong preload method channel '+method);
+    assert.ok(semantics[method],'Missing semantic metadata '+method);const [cancel,partialSuccess,meaning]=semantics[method];const result=declaration.type;
+    assert.ok(ts.isTypeReferenceNode(result)&&result.typeName.getText(contracts)==='Promise');const inner=result.typeArguments[0];assert.ok(ts.isTypeReferenceNode(inner)&&inner.typeName.getText(contracts)==='Result');
+    const handler=handlers.get(channel);const serviceCalls=[];walk(handler.arguments[1],node=>{if(ts.isCallExpression(node)&&ts.isPropertyAccessExpression(node.expression))serviceCalls.push(node.expression.getText(main));});
+    const positions=sfnode=>{const sf=sfnode.getSourceFile();return {file:relative(sf.fileName),line:sf.getLineAndCharacterOfPosition(sfnode.getStart(sf)).line+1};};
+    const actual=consumers.get(method);assert.ok(actual.length||awaitingCursor.has(method)||method==='saveSettings','Missing renderer consumer without an approved migration or compatibility policy: '+method);
+    rows.push({method,channel,parameters:declaration.parameters.map(parameter=>({name:parameter.name.getText(contracts),type:checker.typeToString(checker.getTypeAtLocation(parameter))})),returnType:result.getText(contracts),resultValue:inner.typeArguments[0].getText(contracts),cancel,partialSuccess,meaning,handler:positions(handler),serviceEntry:handler.arguments[1].getText(main),serviceCalls:[...new Set(serviceCalls)],preload:positions(property),consumers:actual,status:actual.length?'connected':method==='saveSettings'?'compatibility-only':'awaiting-cursor'});
+  }
+  const eventMethod=methods.get('onDesktopChange');assert.ok(eventMethod);const eventProperty=preloadMembers.get('onDesktopChange');const on=calls(eventProperty,'ipcRenderer.on'),off=calls(eventProperty,'ipcRenderer.removeListener');assert.equal(on.length,1);assert.equal(off.length,1);assert.equal(on[0].arguments[0].text,'desktop:changed');assert.equal(off[0].arguments[0].text,'desktop:changed');
+  const sends=[];walk(main,node=>{if(ts.isCallExpression(node)&&ts.isPropertyAccessExpression(node.expression)&&node.expression.name.text==='send'&&node.arguments[0]?.text==='desktop:changed'){sends.push({file:relative(main.fileName),line:main.getLineAndCharacterOfPosition(node.getStart(main)).line+1,payload:node.arguments[1].getText(main)});}});assert.equal(sends.length,1);
+  const broadcasts=calls(main,'broadcast').map(call=>({line:main.getLineAndCharacterOfPosition(call.getStart(main)).line+1,arguments:call.arguments.map(argument=>argument.getText(main))}));
+  return {schemaVersion:1,generatedFrom:['src/shared/contracts.ts','src/shared/ipc-contracts.ts','src/preload/index.ts','src/main/index.ts','src/renderer/**'],counts:{asynchronousMethods:rows.length,eventSubscriptions:on.length},methods:rows.sort((a,b)=>a.channel.localeCompare(b.channel)),events:[{method:'onDesktopChange',channel:'desktop:changed',parameters:eventMethod.parameters.map(parameter=>({name:parameter.name.getText(contracts),type:checker.typeToString(checker.getTypeAtLocation(parameter))})),returnType:eventMethod.type.getText(contracts),consumers:consumers.get('onDesktopChange'),sendSites:sends,broadcastCalls:broadcasts,semantics:'gameId is current selected context, not operation-game receipt; settingsChanged requests configuration reload, including canceled restore; unsubscribe removes listener. Successful handler policy is in main handle; cancellation may refresh.'}]};
+}
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
+  const inventory=await deriveInventory();const output=path.join(root,'docs/desktop-api-inventory.json');const json=JSON.stringify(inventory,null,2)+'\n';
+  if(process.argv.includes('--write')){await fs.writeFile(output,json);console.log('Generated '+relative(output)+' ('+inventory.counts.asynchronousMethods+' async + 1 event)');}
+  else{assert.equal(await fs.readFile(output,'utf8'),json,'Inventory differs from current AST; run npm.cmd run api:inventory and review');console.log('API AST check PASS: '+inventory.counts.asynchronousMethods+' async + 1 event; mapping/preload/handlers/consumer inventory matches');}
+}

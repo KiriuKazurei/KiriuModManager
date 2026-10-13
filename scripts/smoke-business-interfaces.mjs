@@ -1,0 +1,38 @@
+import {_electron as electron} from 'playwright';
+import {promises as fs} from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+const baseline=process.argv.includes('--baseline');const packaged=process.argv.includes('--packaged');
+const reportArgument=process.argv.find(arg=>arg.startsWith('--package-report='));
+const packageReport=packaged?JSON.parse(await fs.readFile(reportArgument?.slice('--package-report='.length)||process.env.KMM_PACKAGE_REPORT||'release/package-report.json','utf8')):null;
+const parent=path.resolve(process.env.KMM_SMOKE_DIR||'.run-data/modules-review/phase3-bridge');await fs.mkdir(parent,{recursive:true});const run=await fs.mkdtemp(path.join(parent,'run-'));const data=path.join(run,'data');
+const settings={version:1,selectedGame:'zzz',games:{}};async function write(file,bytes){await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,bytes);}
+for(const game of ['zzz','endfield']){const modsDirectory=path.join(run,game,'Mods');settings.games[game]={xxmiRoot:'',gameDirectory:'',modsDirectory};await write(path.join(modsDirectory,'Fixture','main.ini'),'[KeyCycle]\r\nkey=A\r\n;original\r\n');}
+await write(path.join(data,'settings.json'),JSON.stringify(settings));const env={...process.env,KMM_DATA_DIR:data};delete env.ELECTRON_RUN_AS_NODE;delete env.KMM_DEV_URL;
+let app;const results=[];const errors=[];let main;let floating;
+async function request(page,method,...args){return page.evaluate(({method,args})=>window.kmm[method](...args),{method,args});}
+function value(result){assert.equal(result.ok,true,result.error);return result.value;}
+async function subscribe(page){await page.evaluate(()=>{window.__businessChanges=[];window.__unsubscribeBusiness=window.kmm.onDesktopChange(event=>window.__businessChanges.push(event));});}
+async function clear(){await Promise.all([main,floating].map(page=>page.evaluate(()=>{window.__businessChanges=[];})));}
+async function events(method,work){await clear();const result=value(await work());const received=await Promise.all([main,floating].map(async page=>{try{await page.waitForFunction(()=>window.__businessChanges.length>0,{},{timeout:baseline?600:5000});}catch(error){if(!baseline)throw error;}return page.evaluate(()=>window.__businessChanges);}));
+  if(!baseline)for(const list of received){assert.ok(list.length>0,method+' broadcast to both windows');assert.deepEqual(list[0],{gameId:'zzz',settingsChanged:false});}
+  results.push({method,received,selectedContext:'zzz',operationGame:'endfield'});return result;
+}
+try{
+  app=await electron.launch({...(packaged?{executablePath:packageReport.executable,args:[],cwd:run}:{args:['.']}),env});main=await app.firstWindow();main.on('pageerror',e=>errors.push(e.message));await main.getByRole('heading',{name:/^Mod 库/}).waitFor();value(await request(main,'floating',true));
+  floating=app.windows().find(page=>page!==main);assert.ok(floating);await floating.waitForFunction(()=>!!window.kmm);floating.on('pageerror',e=>errors.push(e.message));await subscribe(main);await subscribe(floating);
+  const mod=value(await request(main,'scanMods','endfield')).mods[0];
+  const list=await events('savePreset',()=>request(main,'savePreset','endfield',null,'跨窗预设',null));const preset=list[0];assert.equal(value(await request(floating,'presets','endfield'))[0].id,preset.id);
+  await events('deletePreset',()=>request(floating,'deletePreset','endfield',preset.id));assert.deepEqual(value(await request(main,'presets','endfield')),[]);
+  const document=value(await request(main,'readIni','endfield',mod.id,'main.ini'));await events('saveIni',()=>request(main,'saveIni','endfield',mod.id,'main.ini',document.digest,{kind:'keys',keys:document.keys.map(key=>({...key,key:'VK_F9'}))}));assert.match(value(await request(floating,'readIni','endfield',mod.id,'main.ini')).text,/VK_F9/);
+  const backupList=await events('createBackup',()=>request(floating,'createBackup','endfield','跨窗完整副本'));assert.ok(backupList.some(item=>item.name==='跨窗完整副本'));assert.ok(value(await request(main,'recovery','endfield')).some(item=>item.name==='跨窗完整副本'));
+  const before=await fs.readFile(path.join(settings.games.endfield.modsDirectory,mod.relativePath,'main.ini'));const count=value(await request(main,'recovery','endfield')).length;const current=value(await request(main,'readIni','endfield',mod.id,'main.ini'));await clear();const rejected=await request(floating,'saveIni','endfield',mod.id,'main.ini',current.digest,{kind:'text',text:'中'.repeat(1500001)});
+  if(!baseline){assert.equal(rejected.ok,false);assert.match(rejected.error,/编码后超过4MB/);assert.deepEqual(await fs.readFile(path.join(settings.games.endfield.modsDirectory,mod.relativePath,'main.ini')),before);assert.equal(value(await request(main,'recovery','endfield')).length,count);await main.waitForTimeout(150);for(const page of [main,floating])assert.deepEqual(await page.evaluate(()=>window.__businessChanges),[]);}
+  const rejectedEvidence={result:rejected,fileBytes:(await fs.stat(path.join(settings.games.endfield.modsDirectory,mod.relativePath,'main.ini'))).size,originalBytes:before.length,backupsBefore:count,backupsAfter:value(await request(main,'recovery','endfield')).length};
+  if(baseline){for(const item of results)assert.deepEqual(item.received,[[],[]]);assert.equal(rejected.ok,false);assert.ok(rejectedEvidence.fileBytes>4*1024**2);assert.equal(rejectedEvidence.backupsAfter,count+1);}
+  // A real open editor and preset draft retain their unsaved contents on these notifications.
+  if(!baseline){value(await request(main,'selectGame','zzz'));await main.getByRole('button',{name:'预设',exact:true}).click();await main.getByLabel('预设名称').fill('主窗未保存预设');await request(floating,'savePreset','zzz',null,'浮窗已保存预设',null);await main.locator('.tool-row').filter({hasText:'浮窗已保存预设'}).waitFor();assert.equal(await main.getByLabel('预设名称').inputValue(),'主窗未保存预设');
+    await main.getByRole('button',{name:'Mod 库',exact:true}).click();await main.getByRole('button',{name:/^全部 Mod/}).click();await main.locator('.mod-row').filter({hasText:'Fixture'}).click();await main.getByRole('button',{name:'打开 INI 编辑器',exact:true}).click();const text=main.getByLabel('INI 原始文本',{exact:true});await text.fill('主窗未保存 INI 草稿');const zmod=value(await request(floating,'scanMods','zzz')).mods[0];const zdoc=value(await request(floating,'readIni','zzz',zmod.id,'main.ini'));value(await request(floating,'saveIni','zzz',zmod.id,'main.ini',zdoc.digest,{kind:'keys',keys:zdoc.keys.map(key=>({...key,key:'VK_F8'}))}));assert.equal(await text.inputValue(),'主窗未保存 INI 草稿');await main.screenshot({path:path.join(run,'unsaved-ini.png')});
+  }
+  assert.deepEqual(errors,[]);const report={result:baseline?'REPRODUCED':'PASS',baseline,packaged,run,data,productionBridge:true,uiFormActions:!baseline,notifications:results,rejectedEvidence,errors,noRealGameExecuted:true,layoutChecked:false,checks:baseline?['prior built runtime missing business broadcasts and encoded-byte write-before-error reproduced']:['both real windows receive new save/delete INI/backup notifications','payload gameId remains selected context for another-game operation','errors do not broadcast or modify INI/backups','opposite window reads actual preset/INI/recovery results','unsaved preset name and INI text remain on external save notifications']};await write(path.join(run,'report.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
+}catch(error){await write(path.join(run,'failure.json'),JSON.stringify({error:String(error),results},null,2));if(main)await main.screenshot({path:path.join(run,'failure.png')}).catch(()=>{});throw error;}finally{if(app)await app.close();}

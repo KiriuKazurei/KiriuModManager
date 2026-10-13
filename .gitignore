@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.run-data/
+*.log
+release/
+upstream/
+tools/
+docs/disable/
+.codex/
+.agents/
+.env
+.env.*
+!.env.example
