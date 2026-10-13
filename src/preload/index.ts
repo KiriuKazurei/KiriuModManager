@@ -3,6 +3,12 @@ import type { DesktopAPI } from '../shared/contracts';
 import type {IPCChannel,IPCArguments,IPCContracts} from '../shared/ipc-contracts';
 const invoke=<C extends IPCChannel>(channel:C,...args:IPCArguments<C>):ReturnType<IPCContracts[C]>=>ipcRenderer.invoke(channel,...args) as ReturnType<IPCContracts[C]>;
 const api: DesktopAPI = {
+  setWindowTheme:theme=>invoke('desktop:window-theme',theme),
+  setModBrowser:(game,bounds)=>invoke('market:view',game,bounds),
+  modBrowserStatus:()=>invoke('market:status'),
+  navigateModBrowser:action=>invoke('market:navigate',action),
+  modDownloadAction:(id,action,destinations)=>invoke('market:download-action',id,action,destinations),
+  modDownloadInstallPlan:id=>invoke('market:install-plan',id),
   checkAppUpdate:()=>invoke('update:check'),
   appUpdateStatus:()=>invoke('update:status'),
   downloadAppUpdate:()=>invoke('update:download'),

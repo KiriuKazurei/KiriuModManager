@@ -4,6 +4,15 @@ export const GAMES = {
 } as const;
 export type GameId = keyof typeof GAMES;
 export const DEFAULT_APP_UPDATE_SOURCE='https://github.com/KiriuKazurei/KiriuModManager';
+export const MOD_MARKET_URLS:Partial<Record<GameId,string>>={zzz:'https://gamebanana.com/games/19567',endfield:'https://gamebanana.com/games/21842'};
+export interface ModRemoteInfo {provider:'gamebanana';modId:number;fileId:number;title:string;author:string;category:string;description:string;fileName:string;downloadUrl:string;size:number;checksum:string;checksumAlgorithm:'md5'|'';entryPath?:string}
+export interface ModBrowserBounds {x:number;y:number;width:number;height:number}
+export interface ModDownloadInstallItem {id?:string;name:string;ok:boolean;existing?:boolean;error?:string}
+export interface ModInstallDestination {entryPath:string;folder:string}
+export interface ModDownloadInstallPlan {targetRoot:string;folders:string[];items:(ModInstallDestination&{name:string;character:string})[]}
+export interface ModDownload {id:string;gameId:GameId;targetRoot:string;fileName:string;title:string;character?:string;stage:'binding'|'downloading'|'verifying'|'ready'|'installing'|'waiting-directory'|'complete'|'partial'|'error'|'canceled'|'interrupted';receivedBytes:number;totalBytes:number;archiveReady:boolean;message:string;importedIds:string[];items:ModDownloadInstallItem[];createdAt:string;updatedAt:string}
+export type ModDownloadAction='cancel'|'retry-download'|'retry-binding'|'retry-install'|'install-current'|'show-file';
+export interface ModBrowserStatus {gameId:GameId;url:string;loading:boolean;canGoBack:boolean;canGoForward:boolean;error:string;externalUrl:string;downloads:ModDownload[]}
 export interface GamePaths { xxmiRoot: string; gameDirectory: string; modsDirectory: string }
 export interface DesktopPreferences { marketUrl:string; updateUrl:string; closeToTray:boolean; updateSourceUrl?:string }
 export interface Settings { version: 1; selectedGame: GameId; games: Record<GameId, GamePaths>; desktop?:DesktopPreferences }
@@ -26,7 +35,7 @@ export interface ModProvenance extends ModProvenanceFields {importedAt:string;hi
 export interface ExclusiveGroup {id:string;name:string;modIds:string[]}
 export interface ExclusiveConflict {groupId:string;name:string;candidateIds:string[]}
 export type ExclusiveChoices=Record<string,string>;
-export interface ModEntry { id: string; name: string; relativePath: string; metadata: ModMetadata; provenance:ModProvenance; enabled: boolean; ownDisabled: boolean; disabledAncestors: string[]; hasCover: boolean; iniCount: number }
+export interface ModEntry { id: string; name: string; relativePath: string; metadata: ModMetadata; provenance:ModProvenance; remote?:ModRemoteInfo; enabled: boolean; ownDisabled: boolean; disabledAncestors: string[]; hasCover: boolean; iniCount: number }
 export interface LibrarySnapshot { gameId: GameId; root: string; mods: ModEntry[]; exclusiveGroups:ExclusiveGroup[]; warnings: string[]; characters: string[]; categories: string[]; appearances: string[]; loaderMatched: boolean; excludeMatched: boolean }
 export type ModOperation = { kind: 'toggle'; enabled: boolean } | { kind: 'rename'; name: string } | { kind: 'classify'; category: string; character: string; appearance: string } | { kind: 'metadata'; metadata: ModMetadata } | {kind:'provenance';fields:ModProvenanceFields};
 export type BatchModOperation=Extract<ModOperation,{kind:'toggle'|'classify'}>;
@@ -48,6 +57,12 @@ export interface AppUpdateStatus {
   lastResult?:{stage:string;message:string;backup?:string};
 }
 export interface DesktopAPI {
+  setWindowTheme(theme:'day'|'night'):Promise<Result<void>>;
+  setModBrowser(game:GameId,bounds:ModBrowserBounds|null):Promise<Result<ModBrowserStatus>>;
+  modBrowserStatus():Promise<Result<ModBrowserStatus>>;
+  navigateModBrowser(action:'back'|'forward'|'reload'|'home'|'external'):Promise<Result<ModBrowserStatus>>;
+  modDownloadAction(id:string,action:ModDownloadAction,destinations?:ModInstallDestination[]):Promise<Result<ModBrowserStatus>>;
+  modDownloadInstallPlan(id:string):Promise<Result<ModDownloadInstallPlan>>;
   checkAppUpdate():Promise<Result<AppUpdateStatus>>;
   appUpdateStatus():Promise<Result<AppUpdateStatus>>;
   downloadAppUpdate():Promise<Result<AppUpdateStatus|null>>;

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import {unwrap} from './ui';
 
 type ThemeName = 'day' | 'night';
 
@@ -9,14 +10,16 @@ function preferredTheme(): ThemeName {
 }
 
 export function applyStoredTheme() {
-  document.documentElement.dataset.theme = preferredTheme();
+  const theme=preferredTheme();document.documentElement.dataset.theme = theme;syncWindowTheme(theme);
 }
+function syncWindowTheme(theme:ThemeName){if(location.hash!=='#floating')void window.kmm.setWindowTheme(theme).then(unwrap).catch(error=>console.error('标题栏主题同步失败',error));}
 
 export function ThemeControl() {
   const [theme, setTheme] = useState<ThemeName>(preferredTheme);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('kmm-theme', theme);
+    syncWindowTheme(theme);
   }, [theme]);
   const next: ThemeName = theme === 'night' ? 'day' : 'night';
   return <button type="button" className="theme-toggle" aria-pressed={theme === 'day'} aria-label={next === 'day' ? '切换到日间' : '切换到夜间'} onClick={() => setTheme(next)}>

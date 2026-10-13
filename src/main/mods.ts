@@ -10,7 +10,11 @@ import { RecoveryStore } from './recovery';
 import {emptyProvenance,editableProvenance} from '../shared/mod-provenance';
 import {readProvenance,updateProvenance} from './mod-provenance';
 import {exclusiveRequests} from './exclusive-groups';
-interface RecordEntry { id: string; relativePath: string; metadata: ModMetadata; provenance?:ModProvenance; cover?: string; deleted?: string }
+import type {GameBananaDownload} from './gamebanana';
+import type {ModRemoteInfo,ModDownloadInstallItem,ModDownloadInstallPlan,ModInstallDestination} from '../shared/contracts';
+import {readRemoteInfo,readDownloadBinding,verifyModDownload,ModDirectoryChangedError} from './gamebanana';
+import {writeAtomicJson} from './atomic-json';
+interface RecordEntry { id: string; relativePath: string; metadata: ModMetadata; provenance?:ModProvenance; remote?:ModRemoteInfo; cover?: string; deleted?: string }
 interface LibraryData { version: 1; root: string; records: Record<string, RecordEntry>; groups: { category: string[]; character: string[]; appearance: string[] }; characterCovers?:Record<string,string>;exclusiveGroups?:ExclusiveGroup[] }
 const disabled = (name: string) => /^DISABLED/i.test(name);
 const clean = (name: string) => name.replace(/^DISABLED_?/i, '');
@@ -87,7 +91,7 @@ export class ModService {
   async characterCoverReferences(game:GameId){return (await this.load(game)).characterCovers||{};}
   async setCharacterCoverReference(game:GameId,name:string,file:string){const data=await this.load(game);data.characterCovers={...data.characterCovers,[name]:file};await this.save(game,data);}
   async context(game:GameId,id?:string){const data=await this.load(game);return {data,...(id?await this.resolve(data,id):{record:undefined,directory:data.root})};}
-  async recoverRecord(game:GameId,input:unknown){const data=await this.load(game);const record=input as RecordEntry;if(!record||typeof record.id!=='string'||!record.relativePath)throw new Error('恢复元数据格式无效。');containedPath(data.root,record.relativePath);record.metadata=validateMetadata(record.metadata);if(record.provenance)record.provenance=readProvenance(record.provenance);delete record.deleted;data.records[record.id]=record;await this.save(game,data);const snapshot=await this.scan(game);if(snapshot.mods.find(mod=>mod.id===record.id)?.enabled&&snapshot.exclusiveGroups.some(group=>group.modIds.includes(record.id)))return this.operate(game,record.id,{kind:'toggle',enabled:true});return snapshot;}
+  async recoverRecord(game:GameId,input:unknown){const data=await this.load(game);const record=input as RecordEntry;if(!record||typeof record.id!=='string'||!record.relativePath)throw new Error('恢复元数据格式无效。');containedPath(data.root,record.relativePath);record.metadata=validateMetadata(record.metadata);if(record.provenance)record.provenance=readProvenance(record.provenance);if(record.remote)record.remote=readRemoteInfo(record.remote);delete record.deleted;data.records[record.id]=record;await this.save(game,data);const snapshot=await this.scan(game);if(snapshot.mods.find(mod=>mod.id===record.id)?.enabled&&snapshot.exclusiveGroups.some(group=>group.modIds.includes(record.id)))return this.operate(game,record.id,{kind:'toggle',enabled:true});return snapshot;}
   private file(game: GameId) { if (!Object.hasOwn(GAMES, game)) throw new Error('不支持的游戏。'); return path.join(this.dataDirectory, `library-${game}.json`); }
   private async load(game: GameId): Promise<LibraryData> {
     this.file(game);
@@ -108,7 +112,7 @@ export class ModService {
     }
     return data;
   }
-  private async save(game: GameId, data: LibraryData) { await fs.mkdir(this.dataDirectory, { recursive:true }); await fs.writeFile(this.file(game), JSON.stringify(data, null, 2), 'utf8'); }
+  private async save(game: GameId, data: LibraryData) { await writeAtomicJson(this.file(game),JSON.stringify(data,null,2)); }
   private async resolve(data: LibraryData, id: string): Promise<{record: RecordEntry; directory: string}> {
     if (typeof id !== 'string' || !Object.hasOwn(data.records, id) || data.records[id].deleted) throw new Error('Mod 不存在，请重新扫描。');
     const record = data.records[id]; const directory = containedPath(data.root, record.relativePath); await assertNoLinks(directory);
@@ -123,7 +127,7 @@ export class ModService {
     let iniCount = 0;
     const count = async (folder: string) => { for (const entry of await fs.readdir(folder, { withFileTypes:true })) { if (entry.isFile() && modIni(entry.name)) iniCount++; if (entry.isDirectory() && !entry.isSymbolicLink()) await count(path.join(folder, entry.name)); } }; await count(directory);
     if (!record.cover && covers) record.cover = covers;
-    return { id:record.id, name:clean(parts.at(-1)!), relativePath:record.relativePath, metadata:record.metadata,provenance:readProvenance(record.provenance), enabled:!ownDisabled && !disabledAncestors.length, ownDisabled, disabledAncestors, hasCover:!!record.cover && await present(containedPath(directory, record.cover)), iniCount };
+    return { id:record.id, name:clean(parts.at(-1)!), relativePath:record.relativePath, metadata:record.metadata,provenance:readProvenance(record.provenance), ...(record.remote?{remote:readRemoteInfo(record.remote)}:{}), enabled:!ownDisabled && !disabledAncestors.length, ownDisabled, disabledAncestors, hasCover:!!record.cover && await present(containedPath(directory, record.cover)), iniCount };
   }
   async scan(game: GameId): Promise<LibrarySnapshot> {
     const data = await this.load(game); const relativePaths = await discover(data.root, new Set(Object.values(data.records).filter(record=>!record.deleted).map(record=>record.relativePath)));
@@ -269,6 +273,111 @@ export class ModService {
     }
     await this.save(game,data); return {library:await this.scan(game),importedIds:ids,errors,canceled:false};
   }
+  private async unpackDownload(game:GameId,file:string,root:string,input:GameBananaDownload) {
+    const binding=readDownloadBinding(input,game);
+    const current=(await this.paths(game)).modsDirectory;
+    if(!current||!root||path.resolve(current).toLowerCase()!==path.resolve(root).toLowerCase())throw new ModDirectoryChangedError();
+    await verifyModDownload(file,binding);
+    const data=await this.load(game);
+    if(relation(data.root,file)||relation(file,data.root))throw new Error('下载缓存与 Mod 目录重叠，请设置独立的 Mod 目录。');
+    const parent=path.join(this.dataDirectory,'imports');await fs.mkdir(parent,{recursive:true});
+    const unpacked=await fs.mkdtemp(path.join(parent,'web-'));
+    try {
+      await extractModArchive(file,unpacked);let candidates=await discover(unpacked);
+      if((await fs.readdir(unpacked,{withFileTypes:true})).some(entry=>entry.isFile()&&modIni(entry.name)))candidates=[''];
+      if(!candidates.length)throw new Error('没有发现包含 INI 的 Mod。');
+      return {unpacked,candidates,binding};
+    }catch(error){await fs.rm(unpacked,{recursive:true}).catch(()=>{});throw error;}
+  }
+  private characterFor(game:GameId,value:string) {
+    const exact=CHARACTER_ALIASES[game][clean(value).toLowerCase().replace(/[\s_.-]+/g,'')]||INITIAL_CHARACTERS[game].find(name=>name===clean(value));
+    if(exact)return exact;
+    const matches=new Set<string>();
+    const words=value.toLowerCase().replace(/[_.-]+/g,' ');
+    for(const [alias,character]of Object.entries(CHARACTER_ALIASES[game]))if(new RegExp(`(^|[^a-z0-9])${alias}($|[^a-z0-9])`,'i').test(words)||words.replace(/\s/g,'')===alias)matches.add(character);
+    const chinese=INITIAL_CHARACTERS[game].filter(name=>name.length>1&&value.includes(name));
+    for(const character of chinese.filter(name=>!chinese.some(other=>other!==name&&other.includes(name))))matches.add(character);
+    return matches.size===1?[...matches][0]:'';
+  }
+  private async downloadPlan(game:GameId,root:string,candidates:string[],binding:GameBananaDownload,snapshot:LibrarySnapshot):Promise<ModDownloadInstallPlan> {
+    const folders=[''];let examined=0;
+    const walk=async(folder:string,depth:number)=>{
+      if(depth>16||++examined>20000)throw new Error('分类目录过多或过深，请整理 Mod 目录。');
+      const directory=folder?containedPath(root,folder):root;await assertNoLinks(directory);
+      for(const entry of await fs.readdir(directory,{withFileTypes:true}))if(entry.isDirectory()&&!entry.isSymbolicLink()&&!entry.name.startsWith('.')&&!resourceNames.has(clean(entry.name).toLowerCase())){
+        const relative=path.join(folder,entry.name);
+        if(snapshot.mods.some(mod=>mod.relativePath.toLowerCase()===relative.toLowerCase()))continue;
+        folders.push(relative.replaceAll('\\','/'));await walk(relative,depth+1);
+      }
+    };
+    await walk('',0);
+    const items=candidates.map(candidate=>{
+      const name=candidate?clean(path.basename(candidate)):clean(path.basename(binding.remote.fileName,path.extname(binding.remote.fileName)));
+      const ancestor=inferred(game,candidate||name,snapshot.categories);
+      const character=this.characterFor(game,ancestor.character)||this.characterFor(game,name)||binding.metadata.character||this.characterFor(game,binding.remote.title)||this.characterFor(game,binding.remote.fileName);
+      const category=binding.metadata.category||ancestor.category||(character?'角色':'');
+      const matches=character?folders.filter(folder=>this.characterFor(game,path.basename(folder))===character):[];
+      const preferred=matches.filter(folder=>folder.split('/')[0]===category);
+      const selected=preferred.length===1?preferred[0]:matches.length===1?matches[0]:'';
+      const folder=selected||(character?[category||'角色',character].join('/'):category);
+      return {entryPath:candidate.replaceAll('\\','/'),name,character,folder};
+    });
+    return {targetRoot:root,folders:[...new Set([...folders,...items.map(item=>item.folder)])].sort((a,b)=>a.localeCompare(b,'zh-CN')),items};
+  }
+  async downloadInstallPlan(game:GameId,file:string,root:string,input:GameBananaDownload):Promise<ModDownloadInstallPlan> {
+    const work=await this.unpackDownload(game,file,root,input);
+    try{return await this.downloadPlan(game,root,work.candidates,work.binding,await this.scan(game));}
+    finally{await fs.rm(work.unpacked,{recursive:true}).catch(()=>{});}
+  }
+  async installDownload(game:GameId,file:string,root:string,input:GameBananaDownload,destinations?:ModInstallDestination[]):Promise<ImportResult&{items:ModDownloadInstallItem[]}> {
+    const {unpacked,candidates,binding}=await this.unpackDownload(game,file,root,input);const items:ModDownloadInstallItem[]=[];const ids:string[]=[];
+    try {
+      const snapshot=await this.scan(game);const live=new Set(snapshot.mods.map(mod=>mod.id));
+      const plan=await this.downloadPlan(game,root,candidates,binding,snapshot);
+      const selected=destinations===undefined?plan.items:destinations;
+      if(!Array.isArray(selected)||selected.length!==candidates.length||new Set(selected.map(item=>item?.entryPath)).size!==candidates.length||selected.some(item=>!item||typeof item.entryPath!=='string'||!plan.items.some(row=>row.entryPath===item.entryPath)||typeof item.folder!=='string'))throw new Error('安装文件夹选择与压缩包条目不匹配，请重新选择。');
+      const folders=new Map(selected.map(item=>{
+        if(path.isAbsolute(item.folder)||item.folder.length>4096)throw new Error('安装文件夹必须位于已保存的 Mod 目录内。');
+        const folder=item.folder?item.folder.split(/[\\/]/).map(part=>safeName(part)).join(path.sep):'';
+        if(folder.split(path.sep).some(part=>part.startsWith('.')||resourceNames.has(clean(part).toLowerCase())))throw new Error('请选择可管理的角色或分类文件夹，不能安装到隐藏目录或资源目录。');
+        if(folder&&snapshot.mods.some(mod=>relation(containedPath(root,mod.relativePath),containedPath(root,folder))))throw new Error('不能把 Mod 安装到另一个 Mod 的内部，请选择角色或分类文件夹。');
+        return [item.entryPath,folder];
+      }));
+      // Scan can discover external entries; use its latest registry before committing new records.
+      const latest=await this.load(game);
+      for(const candidate of candidates){
+        const entryPath=candidate.replaceAll('\\','/');let name=candidate?clean(path.basename(candidate)):clean(path.basename(binding.remote.fileName,path.extname(binding.remote.fileName)));
+        let staging='';let stagingOwned=false;let destination='';let committed=false;let id='';
+        try {
+          name=safeName(name);
+          const existing=Object.values(latest.records).find(record=>live.has(record.id)&&record.remote?.modId===binding.remote.modId&&record.remote.fileId===binding.remote.fileId&&record.remote.entryPath===entryPath);
+          if(existing){items.push({id:existing.id,name,ok:true,existing:true});continue;}
+          const folder=folders.get(entryPath)!;const parent=folder?containedPath(latest.root,folder):latest.root;
+          await assertNoLinks(parent);
+          destination=containedPath(latest.root,path.join(folder,`DISABLED_${name}`));const enabled=containedPath(latest.root,path.join(folder,name));
+          await assertNoLinks(destination);await assertNoLinks(enabled);
+          if(await present(destination)||await present(enabled))throw new Error('目标已有同名 Mod，原内容保持，请改名或使用替换功能。');
+          const labels=folder?inferred(game,path.join(folder,name),latest.groups.category):undefined;
+          if(labels){const parts=folder.split(path.sep).map(clean);const index=parts.findIndex(part=>!!this.characterFor(game,part));if(index>=0){labels.category=index?parts.slice(0,index).join(' · '):binding.metadata.category||'角色';labels.character=this.characterFor(game,parts[index]);labels.appearance=parts.slice(index+1).join(' · ');}}
+          const metadataValue=validateMetadata({...inferred(game,candidate||name,latest.groups.category),...binding.metadata,...(labels?{category:labels.category,character:labels.character,appearance:labels.appearance}:{})});
+          staging=containedPath(path.dirname(latest.root),`.kmm-import-${randomUUID()}`);await assertNoLinks(staging);await fs.mkdir(staging);stagingOwned=true;
+          const payload=path.join(staging,'payload');await copyDirectory(candidate?containedPath(unpacked,candidate):unpacked,payload);
+          // Windows directory rename refuses an existing destination; all content is prepared first.
+          await fs.mkdir(parent,{recursive:true});await assertNoLinks(parent);
+          if(await present(destination)||await present(enabled))throw new Error('安装目标在准备期间出现同名内容，未覆盖。');
+          await fs.rename(payload,destination);committed=true;id=randomUUID();
+          latest.records[id]={id,relativePath:path.relative(latest.root,destination),metadata:metadataValue,provenance:{...emptyProvenance(new Date().toISOString()),sourceUrl:`https://gamebanana.com/mods/${binding.remote.modId}`,version:binding.version},remote:{...binding.remote,entryPath}};
+          await this.save(game,latest);ids.push(id);live.add(id);items.push({id,name,ok:true});
+        }catch(error){
+          let message=(error as Error).message;
+          if(id)delete latest.records[id];
+          if(committed){try{await assertNoLinks(destination);await fs.rm(destination,{recursive:true});}catch{message+=` 新内容未能撤回，请检查：${destination}`;}}
+          items.push({name,ok:false,error:message});
+        }finally{if(stagingOwned)await fs.rm(staging,{recursive:true}).catch(()=>{});}
+      }
+      return {library:await this.scan(game),importedIds:ids,errors:items.filter(item=>!item.ok).map(item=>`${item.name}：${item.error}`),canceled:false,items};
+    }finally{await fs.rm(unpacked,{recursive:true}).catch(()=>{});}
+  }
   async delete(game:GameId,id:string):Promise<LibrarySnapshot> {
     const data=await this.load(game); const {record,directory}=await this.resolve(data,id);
     const recovery=await new RecoveryStore(this.dataDirectory).create(game,{root:data.root,kind:'mod-delete',name:clean(path.basename(directory)),relativePath:record.relativePath,modId:id,record,includesContent:true},target=>copyDirectory(directory,target));
@@ -291,6 +400,7 @@ export class ModService {
     await fs.rm(directory,{recursive:true});
     try { await copyDirectory(payload,directory); } catch(error) { if(await present(directory)) await fs.rm(directory,{recursive:true}); await copyDirectory(recovery,directory); throw error; }
     record.provenance=provenance;
+    delete record.remote;
     await this.save(game,data); return this.scan(game);
   }
   async cover(game:GameId,id:string):Promise<string|null> {

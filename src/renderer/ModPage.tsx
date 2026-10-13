@@ -6,17 +6,19 @@ import {rebaseModDraft,ModDraftCommit} from './mod-draft';
 import {ModBatchTools} from './ModBatchTools';
 import {ExclusiveGroupsPanel} from './ExclusiveGroupsPanel';
 import {ModProvenancePanel} from './ModProvenancePanel';
-export function ModPage({gameId,savedRoot,onBusy,onSettings,onIni,scope,onBack}:{gameId:GameId;savedRoot:string;onBusy:(value:boolean)=>void;onSettings:()=>void;onIni:(id:string)=>void;scope:CharacterScope;onBack:()=>void}) {
+export function ModPage({gameId,savedRoot,onBusy,onSettings,onIni,scope,onBack,active=true,initialModId=''}:{gameId:GameId;savedRoot:string;onBusy:(value:boolean)=>void;onSettings:()=>void;onIni:(id:string)=>void;scope:CharacterScope;onBack:()=>void;active?:boolean;initialModId?:string}) {
   const [library,setLibrary]=useState<LibrarySnapshot|null>(null);const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [message,setMessage]=useState('');
   const [selectedIds,setSelectedIds]=useState<string[]>([]);
   useEffect(()=>setSelectedIds([]),[gameId,savedRoot]);
+  useEffect(()=>{if(!active)setSelectedIds([]);},[active]);
   useEffect(()=>{if(library)setSelectedIds(previous=>previous.filter(id=>library.mods.some(mod=>mod.id===id)));},[library]);
   const [query,setQuery]=useState('');const [category,setCategory]=useState('');const [character,setCharacter]=useState('');const [status,setStatus]=useState('all');const [selectedId,setSelectedId]=useState('');const [image,setImage]=useState<string|null>(null);
   const [detailDraft,setDetailDraft]=useState(()=>rebaseModDraft(undefined,gameId));const {name,metadata}=detailDraft;const setName=(name:string)=>setDetailDraft(previous=>({...previous,name}));const [groupKind,setGroupKind]=useState<'category'|'character'|'appearance'>('character');const [groupName,setGroupName]=useState('');
-  useEffect(()=>onBusy(busy),[busy,onBusy]);
+  useEffect(()=>{onBusy(active&&busy);},[active,busy,onBusy]);
   useEffect(()=>window.kmm.onDesktopChange(event=>{if(event.gameId===gameId)void window.kmm.scanMods(gameId).then(result=>{if(result.ok)setLibrary(result.value);else setError(result.error);});}),[gameId]);
   useEffect(()=>{ let active=true;setLibrary(null);setSelectedId('');setCharacter('');setCategory('');setQuery('');setStatus('all');setError('');setMessage('');setBusy(true);void window.kmm.scanMods(gameId).then(result=>{if(!active)return;try{setLibrary(unwrap(result));}catch(e){setError((e as Error).message);}finally{setBusy(false);}});return()=>{active=false;onBusy(false);}; },[gameId,savedRoot,onBusy]);
   const selected=library?.mods.find(mod=>mod.id===selectedId);
+  useEffect(()=>{if(initialModId&&library?.mods.some(mod=>mod.id===initialModId))setSelectedId(initialModId);},[initialModId,library?.root]);
   useEffect(()=>{setDetailDraft(previous=>rebaseModDraft(previous,gameId,selected));setImage(null);let active=true;if(selected?.hasCover)void window.kmm.cover(gameId,selected.id).then(result=>{if(!active)return;try{setImage(unwrap(result));}catch(e){setError((e as Error).message);}});return()=>{active=false;};},[selected,gameId]);
   async function action(work:()=>Promise<LibrarySnapshot|null>,messageText:string,committed?:ModDraftCommit) {setBusy(true);setError('');setMessage('');try{const next=await work();if(next){if(committed){const saved=next.mods.find(mod=>mod.id===selectedId);setDetailDraft(previous=>previous.gameId===gameId&&previous.modId===saved?.id?rebaseModDraft(previous,gameId,saved,committed):previous);}setLibrary(next);setMessage(messageText);}}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   async function importSources(kind:'folder'|'archive'){setBusy(true);setError('');setMessage('');try{const result=unwrap(await window.kmm.importMods(gameId,kind));setLibrary(result.library);if(result.importedIds.length)setSelectedId(result.importedIds[0]);if(!result.canceled)setMessage(`已导入 ${result.importedIds.length} 个 Mod。`);if(result.errors.length)setError(result.errors.join('\n'));}catch(e){setError((e as Error).message);}finally{setBusy(false);}}

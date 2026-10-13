@@ -17,7 +17,7 @@ export function AppUpdatePanel({hidden,onBusy}:{hidden:boolean;onBusy:(value:boo
    <p className="hint">默认使用 KiriuModManager 的 GitHub 发布版本。其它 HTTPS 地址需提供更新清单；留空可禁用检查。</p><button disabled={updating||!dirty}>保存更新源</button>
   </form>
   <div className="tool-actions"><button disabled={updating||dirty} onClick={()=>void action(async()=>setStatus(unwrap(await window.kmm.checkAppUpdate())))}>检查更新</button>
-   {status?.release&&['available','error'].includes(status.stage)&&<button disabled={updating||dirty||!status.canInstall} onClick={()=>void action(async()=>{const result=unwrap(await window.kmm.downloadAppUpdate());if(result)setStatus(result);else setNotice('已取消下载。');})}>下载更新</button>}
+   <button disabled={updating||dirty||!status?.canInstall||!status.release||!['available','error'].includes(status.stage)} title={!status?.release?'请先检查是否有新版本':!status.canInstall?'源码运行模式不能替换程序，请使用发行版更新':'确认后下载并校验更新包'} onClick={()=>void action(async()=>{const result=unwrap(await window.kmm.downloadAppUpdate());if(result)setStatus(result);else setNotice('已取消下载。');})}>获取更新</button>
    {status?.stage==='ready'&&<button className="primary" disabled={updating||dirty} onClick={()=>void action(async()=>{const result=unwrap(await window.kmm.installAppUpdate());if(result)setStatus(result);else setNotice('已取消安装，更新包保留。');})}>退出并安装更新</button>}
   </div>
   {dirty&&<p className="hint">先保存更新源，再检查版本。</p>}

@@ -2,6 +2,12 @@ import type {DesktopAPI,Result} from './contracts';
 
 // Type-only correspondence: sandbox preload must not require this file at runtime.
 export interface IPCContracts {
+  'desktop:window-theme':DesktopAPI['setWindowTheme'];
+  'market:view':DesktopAPI['setModBrowser'];
+  'market:status':DesktopAPI['modBrowserStatus'];
+  'market:navigate':DesktopAPI['navigateModBrowser'];
+  'market:download-action':DesktopAPI['modDownloadAction'];
+  'market:install-plan':DesktopAPI['modDownloadInstallPlan'];
   'update:check':DesktopAPI['checkAppUpdate'];
   'update:status':DesktopAPI['appUpdateStatus'];
   'update:download':DesktopAPI['downloadAppUpdate'];

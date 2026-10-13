@@ -15,6 +15,7 @@ import { resolveWebUrl } from './web-links';
 import type {IPCChannel,IPCArguments,IPCValue} from '../shared/ipc-contracts';
 import {CharacterCoverService} from './character-covers';
 import {AppUpdater,acknowledgeUpdate} from './app-updater';
+import {ModBrowser} from './mod-browser';
 
 const dataDirectory = process.env.KMM_DATA_DIR;
 if (dataDirectory) {
@@ -26,11 +27,13 @@ if (debugPort && /^\d+$/.test(debugPort)) app.commandLine.appendSwitch('remote-d
 let window: BrowserWindow | null = null;
 let floatingWindow:BrowserWindow|null=null;let tray:Tray|null=null;let quitting=false;let closeToTray=true;
 let trayMenu:Menu|null=null;
-export function desktopRuntime(){return {window,floatingWindow,tray,trayMenu};}
+let modBrowser:ModBrowser|null=null;
+let finishFileOperations:()=>Promise<void>=async()=>{};let quitDrained=false;
+export function desktopRuntime(){return {window,floatingWindow,tray,trayMenu,modBrowser};}
 const singleton=app.requestSingleInstanceLock();
 if(!singleton)app.quit();
 app.on('second-instance',()=>{if(window?.isMinimized())window.restore();window?.show();window?.focus();});
-app.on('before-quit',()=>{quitting=true;tray?.destroy();tray=null;});
+app.on('before-quit',event=>{quitting=true;if(!quitDrained){event.preventDefault();void Promise.allSettled([modBrowser?.close(),finishFileOperations()]).then(()=>{quitDrained=true;app.quit();});return;}tray?.destroy();tray=null;});
 app.whenReady().then(async () => {
   if(!singleton)return;
   const store = new SettingsStore(app.getPath('userData'));
@@ -40,9 +43,11 @@ app.whenReady().then(async () => {
   const characterCovers=new CharacterCoverService(app.getPath('userData'),path.join(app.getAppPath(),'assets','character-covers'),mods,bytes=>!nativeImage.createFromBuffer(bytes).isEmpty());
   const deployment = new DeploymentService({ fetch: (url, options) => net.fetch(url, options), cacheDirectory: path.join(app.getPath('userData'), 'downloads'), checkRuntime: () => checkRuntime() });
   const updater=new AppUpdater({fetch:(url,options)=>net.fetch(url,options),currentVersion:app.getVersion(),cacheDirectory:path.join(app.getPath('userData'),'app-updates'),installRoot:path.dirname(process.execPath),packaged:app.isPackaged,helperPath:path.join(app.getAppPath(),'assets','update-helper.ps1'),protectedPaths:async()=>{const settings=await store.read();return [app.getPath('userData'),...Object.values(settings.games).flatMap(game=>Object.values(game))];}});
+  let preparingUpdateInstall=false;
   const updateSource=async()=>(await store.read()).desktop?.updateSourceUrl??DEFAULT_APP_UPDATE_SOURCE;
   let pending:Promise<unknown>=Promise.resolve();
   const mutation=<T>(work:()=>Promise<T>):Promise<T>=>{const task=pending.then(work);pending=task.catch(()=>{});return task;};
+  finishFileOperations=async()=>{await pending;};
   const showMain=()=>{window?.show();if(window?.isMinimized())window.restore();window?.focus();};
   const broadcast=async(settingsChanged=false)=>{const settings=await store.read();for(const target of [window,floatingWindow])if(target&&!target.isDestroyed())target.webContents.send('desktop:changed',{gameId:settings.selectedGame,settingsChanged});};
   const trustedDocuments=new WeakMap<BrowserWindow,string>();
@@ -65,11 +70,13 @@ app.whenReady().then(async () => {
   const trayAction=(work:()=>Promise<unknown>)=>{void mutation(work).catch(error=>dialog.showErrorBox('桌面操作失败',(error as Error).message));};
   const updateTray=async()=>{if(!tray)return;const settings=await store.read();closeToTray=settings.desktop?.closeToTray??true;trayMenu=Menu.buildFromTemplate([{label:'显示主窗口',click:showMain},{type:'separator'},...(Object.keys(GAMES)as GameId[]).map(game=>({label:GAMES[game].name,type:'radio' as const,checked:settings.selectedGame===game,click:()=>trayAction(()=>chooseGame(game))})),{type:'separator'},{label:'快速管理浮窗',type:'checkbox',checked:!!floatingWindow,click:()=>trayAction(()=>toggleFloating(!floatingWindow))},{label:'退出 Kiriu Mod Manager',click:()=>app.quit()}]);tray.setContextMenu(trayMenu);};
   // Progress and window controls remain available while a file operation or native dialog waits.
-  const responsiveChannels=new Set(['desktop:status','desktop:floating','desktop:show','desktop:quit','deployment:progress','runtime:check','runtime:download','directory:choose','update:status','update:check','update:download']);
+  const responsiveChannels=new Set(['desktop:window-theme','desktop:status','desktop:floating','desktop:show','desktop:quit','deployment:progress','runtime:check','runtime:download','directory:choose','update:status','update:check','update:download','market:view','market:status','market:navigate','market:download-action','market:install-plan']);
   const handle = <C extends IPCChannel>(channel:C, work:(...args:IPCArguments<C>)=>Promise<IPCValue<C>>) => {
     ipcMain.handle(channel, async (event: IpcMainInvokeEvent, ...args: unknown[]): Promise<Result<IPCValue<C>>> => {
       const sender=[window,floatingWindow].find(target=>target&&!target.isDestroyed()&&event.sender===target.webContents);
       if (!sender || event.senderFrame !== sender.webContents.mainFrame || documentUrl(event.senderFrame.url)!==trustedDocuments.get(sender)) return { ok: false, error: '此页面无权访问桌面接口。' };
+      if(channel==='desktop:window-theme'&&sender!==window)return {ok:false,error:'请在主窗口设置标题栏主题。'};
+      if((channel.startsWith('market:')||channel==='desktop:link'&&args[1]==='market')&&sender!==window)return {ok:false,error:'请在主窗口使用获取 Mod 和下载进度。'};
       const run=async():Promise<Result<IPCValue<C>>>=>{
       if(updater.status.stage==='installing'&&!['update:status','desktop:status','desktop:show','desktop:quit'].includes(channel))return {ok:false,error:'正在退出并安装更新，请等待重新打开。'};
       try { const value=await work(...args as IPCArguments<C>);if(/^(settings:(save|save-game-paths|save-desktop-preferences)|mods:(operate|batch|exclusive-save|exclusive-delete|import|replace|delete|choose-cover|group)|presets:(save|add-members|delete|apply)|ini:save|recovery:(create|restore)|xxmi:(deploy|sync))$/.test(channel)){await broadcast(/^(settings:(save|save-game-paths|save-desktop-preferences)|recovery:restore|xxmi:(deploy|sync))$/.test(channel));await updateTray();}return { ok: true, value }; }
@@ -84,13 +91,28 @@ app.whenReady().then(async () => {
     });
   };
   handle('settings:read', () => store.read());
+  const browser=()=>{if(!modBrowser)throw new Error('内置浏览器尚未就绪。');return modBrowser;};
+  handle('desktop:window-theme',async theme=>{
+    if(theme!=='day'&&theme!=='night')throw new Error('窗口主题无效。');
+    const color=theme==='day'?'#e4e8f0':'#1a1e27';const symbolColor=theme==='day'?'#16181e':'#f4f1ea';
+    if(window&&!window.isDestroyed()){window.setBackgroundColor(color);if(process.platform!=='darwin')window.setTitleBarOverlay({color,symbolColor,height:32});}
+  });
+  handle('market:view',async(game,bounds)=>browser().setView(game,bounds));
+  handle('market:status',async()=>browser().status());
+  handle('market:navigate',async action=>browser().navigate(action));
+  handle('market:download-action',async(id,action,destinations)=>browser().downloadAction(id,action,destinations));
+  handle('market:install-plan',async id=>browser().installPlan(id));
   handle('update:check',async()=>updater.check(await updateSource()));
   handle('update:status',()=>updater.readStatus());
   handle('update:download',async()=>{
     const source=await updateSource();return updater.download(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'question',title:'下载管理器更新',message:`下载 ${release.version}？`,detail:`更新来源：${source}\n大小：${(release.size/1024**2).toFixed(1)} MiB\n\n${release.notes}`,buttons:['取消','下载更新'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});
   });
   handle('update:install',async()=>{
+    if(modBrowser?.hasActiveDownloads())throw new Error('请先等待 Mod 下载和安装完成，或取消下载，再安装管理器更新。');
+    preparingUpdateInstall=true;
+    try {
     const source=await updateSource();const result=await updater.install(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'warning',title:'安装管理器更新',message:`退出并安装 ${release.version}？`,detail:'请先保存所有未提交的编辑。程序将退出、替换完整便携目录并重新打开。用户数据和 Mod 文件保持；旧程序目录保留作回退副本。',buttons:['取消','退出并安装'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});if(result)setTimeout(()=>app.quit(),250);return result;
+    }finally{preparingUpdateInstall=false;}
   });
   handle('desktop:status',async()=>({trayAvailable:!!tray&&!tray.isDestroyed(),floatingVisible:!!floatingWindow&&floatingWindow.isVisible(),version:app.getVersion()}));
   handle('desktop:floating',(visible:boolean)=>toggleFloating(visible));
@@ -99,7 +121,7 @@ app.whenReady().then(async () => {
   handle('desktop:game',(game:GameId)=>chooseGame(game));
   handle('desktop:launch',async (game:GameId,mode:'gui'|'game')=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');const plan=await launchPlan(game,settings.games[game],mode);await spawnLauncher(plan);return mode==='gui'?'XXMI 打开请求已提交，请检查 Launcher 窗口。':'XXMI 启动请求已提交；不代表游戏或 Mod 已加载，请检查游戏窗口。';});
   handle('desktop:refresh',async (game:GameId)=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');const installation=await inspectXXMI(game,settings.games[game].xxmiRoot);if(!installation.installed)throw new Error('所选 loader 未安装，无法确认刷新键。');const executables=await gameExecutables(game,settings.games[game].gameDirectory);const key=await refreshKey(installation.iniPath);const sent=await sendRefresh(path.join(app.getAppPath(),'assets','refresh-helper.ps1'),executables,key.virtualKey);return `${key.name} 刷新请求已发送到所选游戏窗口（PID ${sent.pid}）。${key.defaultKey?'未找到自定义配置，使用默认 F10。':''}请在游戏中确认效果。`;});
-  handle('desktop:link',async (game:GameId,kind:'market'|'update')=>{const settings=await store.read();const url=resolveWebUrl(kind==='market'?settings.desktop?.marketUrl||'':settings.desktop?.updateUrl||'',game,kind);if(!url)throw new Error(kind==='market'?'尚未配置 Mod 网页入口，请在路径与加载器设置地址。':'尚未配置更新发布页，当前没有已发布版本或自动更新来源。');await shell.openExternal(url);return '网页打开请求已提交到默认浏览器。';});
+  handle('desktop:link',async (game:GameId,kind:'market'|'update')=>{if(!Object.hasOwn(GAMES,game)||!['market','update'].includes(kind))throw new Error('网页入口无效。');if(kind==='market'){await browser().navigate('home',game);return `${GAMES[game].name}网页已载入，请在左侧获取Mod中浏览。`;}const settings=await store.read();const url=resolveWebUrl(settings.desktop?.updateUrl||'',game,kind);if(!url)throw new Error('尚未配置更新发布页。');await shell.openExternal(url);return '网页打开请求已提交到默认浏览器。';});
   handle('presets:list',(game:GameId)=>business.presets(game));
   handle('presets:save',(game:GameId,id:string|null,name:string,members:Record<string,boolean>|null)=>business.savePreset(game,id,name,members));
   handle('presets:add-members',(game,id,modIds)=>business.addModsToPreset(game,id,modIds));
@@ -168,10 +190,13 @@ app.whenReady().then(async () => {
   });
   window = new BrowserWindow({
     title: 'Kiriu Mod Manager', width: 1180, height: 900, minWidth: 900, minHeight: 680,
-    backgroundColor: '#0a0d14', show: false,
+    backgroundColor: '#1a1e27', show: false, titleBarStyle:'hidden',
+    ...(process.platform!=='darwin'?{titleBarOverlay:{color:'#1a1e27',symbolColor:'#f4f1ea',height:32}}:{}),
     icon:path.join(app.getAppPath(),'assets','app.ico'),
     webPreferences: { preload: path.join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
+  modBrowser=new ModBrowser({window,cache:path.join(app.getPath('userData'),'mod-downloads'),root:async game=>(await store.read()).games[game].modsDirectory,plan:(file,root,binding)=>mutation(()=>mods.downloadInstallPlan(binding.gameId,file,root,binding)),install:(file,root,binding,destinations)=>mutation(async()=>{if(quitting||preparingUpdateInstall||updater.status.stage==='installing')throw new Error('程序正在退出或安装更新，Mod 压缩包已保留。');try{return await mods.installDownload(binding.gameId,file,root,binding,destinations);}finally{await broadcast();}}),canStart:()=>!quitting&&!preparingUpdateInstall&&updater.status.stage!=='installing',confirmRoot:async(oldRoot,newRoot)=>{const choice=await dialog.showMessageBox(window!,{type:'question',title:'选择 Mod 安装目录',message:'将此任务改用当前已保存的 Mod 根目录？',detail:`任务原目录：${oldRoot||'未配置'}\n当前目录：${newRoot||'未配置'}\n确认后仍需在下载页面点击安装，不移动已有 Mod。`,buttons:['取消','使用当前目录'],defaultId:0,cancelId:0});return choice.response===1;}});
+  await modBrowser.initialize();
   window.on('close',event=>{if(!quitting&&tray&&closeToTray){event.preventDefault();window?.hide();}});
   window.once('ready-to-show', () => { window?.show(); });
   window.on('closed', () => { window = null; floatingWindow?.close(); app.quit(); });
