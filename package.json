@@ -18,6 +18,7 @@
     "package:win": "npm.cmd run build && node scripts/package-windows.mjs",
     "smoke:desktop": "node scripts/smoke-desktop.mjs",
     "smoke:app-update": "node scripts/smoke-app-update.mjs",
+    "smoke:priority": "node scripts/smoke-priority-iteration.mjs",
     "smoke:packaged": "node scripts/smoke-desktop.mjs --packaged",
     "verify:official": "node scripts/verify-official.mjs",
     "smoke:gallery": "node scripts/smoke-gallery.mjs",

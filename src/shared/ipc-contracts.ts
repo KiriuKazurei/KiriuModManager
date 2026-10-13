@@ -19,6 +19,10 @@ export interface IPCContracts {
   'runtime:download':DesktopAPI['openRuntimeDownload'];
   'mods:scan':DesktopAPI['scanMods'];
   'mods:operate':DesktopAPI['operateMod'];
+  'mods:batch':DesktopAPI['batchMods'];
+  'mods:exclusive-save':DesktopAPI['saveExclusiveGroup'];
+  'mods:exclusive-delete':DesktopAPI['deleteExclusiveGroup'];
+  'mods:source':DesktopAPI['openModSource'];
   'mods:import':DesktopAPI['importMods'];
   'mods:replace':DesktopAPI['replaceMod'];
   'mods:delete':DesktopAPI['deleteMod'];
@@ -29,6 +33,7 @@ export interface IPCContracts {
   'mods:group':DesktopAPI['addGroup'];
   'presets:list':DesktopAPI['presets'];
   'presets:save':DesktopAPI['savePreset'];
+  'presets:add-members':DesktopAPI['addModsToPreset'];
   'presets:delete':DesktopAPI['deletePreset'];
   'presets:apply':DesktopAPI['applyPreset'];
   'ini:list':DesktopAPI['iniFiles'];

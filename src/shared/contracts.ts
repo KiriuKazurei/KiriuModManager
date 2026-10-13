@@ -20,12 +20,21 @@ export interface DeploymentProgress { stage: 'idle' | 'resolve' | 'download' | '
 export interface DeploymentResult { settings: Settings; inspection: Inspection; versions: Record<string, string>; runtime: RuntimeStatus; filesDeployed: boolean; ready: boolean; backupDirectory?: string }
 export interface SyncResult { settings: Settings; inspection: Inspection; backupDirectory: string }
 export interface ModMetadata { category: string; character: string; appearance: string; author: string; description: string }
-export interface ModEntry { id: string; name: string; relativePath: string; metadata: ModMetadata; enabled: boolean; ownDisabled: boolean; disabledAncestors: string[]; hasCover: boolean; iniCount: number }
-export interface LibrarySnapshot { gameId: GameId; root: string; mods: ModEntry[]; warnings: string[]; characters: string[]; categories: string[]; appearances: string[]; loaderMatched: boolean; excludeMatched: boolean }
-export type ModOperation = { kind: 'toggle'; enabled: boolean } | { kind: 'rename'; name: string } | { kind: 'classify'; category: string; character: string; appearance: string } | { kind: 'metadata'; metadata: ModMetadata };
+export interface ModProvenanceFields {sourceUrl:string;version:string;gameVersion:string;verification:'unverified'|'verified'|'broken'}
+export interface ModVersionHistory extends ModProvenanceFields {changedAt:string;reason:'edited'|'replaced'}
+export interface ModProvenance extends ModProvenanceFields {importedAt:string;history:ModVersionHistory[]}
+export interface ExclusiveGroup {id:string;name:string;modIds:string[]}
+export interface ExclusiveConflict {groupId:string;name:string;candidateIds:string[]}
+export type ExclusiveChoices=Record<string,string>;
+export interface ModEntry { id: string; name: string; relativePath: string; metadata: ModMetadata; provenance:ModProvenance; enabled: boolean; ownDisabled: boolean; disabledAncestors: string[]; hasCover: boolean; iniCount: number }
+export interface LibrarySnapshot { gameId: GameId; root: string; mods: ModEntry[]; exclusiveGroups:ExclusiveGroup[]; warnings: string[]; characters: string[]; categories: string[]; appearances: string[]; loaderMatched: boolean; excludeMatched: boolean }
+export type ModOperation = { kind: 'toggle'; enabled: boolean } | { kind: 'rename'; name: string } | { kind: 'classify'; category: string; character: string; appearance: string } | { kind: 'metadata'; metadata: ModMetadata } | {kind:'provenance';fields:ModProvenanceFields};
+export type BatchModOperation=Extract<ModOperation,{kind:'toggle'|'classify'}>;
+export interface BatchModItem {id:string;name:string;ok:boolean;error?:string;message?:string}
+export interface BatchModResult {library:LibrarySnapshot;items:BatchModItem[];conflicts:ExclusiveConflict[]}
 export interface ImportResult { library: LibrarySnapshot; importedIds: string[]; errors: string[]; canceled: boolean }
 export interface Preset { id:string; name:string; members:Record<string,boolean>; updatedAt:string }
-export interface PresetApplyResult { library:LibrarySnapshot; issues:string[]; applied:number }
+export interface PresetApplyResult { library:LibrarySnapshot; issues:string[]; applied:number; conflicts:ExclusiveConflict[] }
 export interface IniKey { section:string; line:number; key:string; back:string; keyLine?:number; backLine?:number }
 export interface IniDocument { relativePath:string; text:string; encoding:string; newline:string; digest:string; keys:IniKey[] }
 export type IniEdit = {kind:'text';text:string} | {kind:'keys';keys:IniKey[]};
@@ -56,6 +65,10 @@ export interface DesktopAPI {
   openRuntimeDownload(): Promise<Result<void>>;
   scanMods(game: GameId): Promise<Result<LibrarySnapshot>>;
   operateMod(game: GameId, id: string, operation: ModOperation): Promise<Result<LibrarySnapshot>>;
+  batchMods(game:GameId,ids:string[],operation:BatchModOperation,choices?:ExclusiveChoices):Promise<Result<BatchModResult>>;
+  saveExclusiveGroup(game:GameId,id:string|null,name:string,modIds:string[],enabledId?:string):Promise<Result<LibrarySnapshot>>;
+  deleteExclusiveGroup(game:GameId,id:string):Promise<Result<LibrarySnapshot>>;
+  openModSource(game:GameId,id:string):Promise<Result<string>>;
   importMods(game: GameId, kind: 'folder' | 'archive'): Promise<Result<ImportResult>>;
   replaceMod(game: GameId, id: string, kind: 'folder' | 'archive'): Promise<Result<LibrarySnapshot | null>>;
   deleteMod(game: GameId, id: string): Promise<Result<LibrarySnapshot | null>>;
@@ -66,8 +79,9 @@ export interface DesktopAPI {
   addGroup(game: GameId, kind: 'category' | 'character' | 'appearance', name: string): Promise<Result<LibrarySnapshot>>;
   presets(game:GameId):Promise<Result<Preset[]>>;
   savePreset(game:GameId,id:string|null,name:string,members:Record<string,boolean>|null):Promise<Result<Preset[]>>;
+  addModsToPreset(game:GameId,id:string,modIds:string[]):Promise<Result<Preset[]>>;
   deletePreset(game:GameId,id:string):Promise<Result<Preset[]>>;
-  applyPreset(game:GameId,id:string):Promise<Result<PresetApplyResult>>;
+  applyPreset(game:GameId,id:string,choices?:ExclusiveChoices):Promise<Result<PresetApplyResult>>;
   iniFiles(game:GameId,id:string):Promise<Result<string[]>>;
   readIni(game:GameId,id:string,relativePath:string):Promise<Result<IniDocument>>;
   saveIni(game:GameId,id:string,relativePath:string,digest:string,edit:IniEdit):Promise<Result<IniDocument>>;

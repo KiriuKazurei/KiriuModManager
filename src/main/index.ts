@@ -72,8 +72,9 @@ app.whenReady().then(async () => {
       if (!sender || event.senderFrame !== sender.webContents.mainFrame || documentUrl(event.senderFrame.url)!==trustedDocuments.get(sender)) return { ok: false, error: '此页面无权访问桌面接口。' };
       const run=async():Promise<Result<IPCValue<C>>>=>{
       if(updater.status.stage==='installing'&&!['update:status','desktop:status','desktop:show','desktop:quit'].includes(channel))return {ok:false,error:'正在退出并安装更新，请等待重新打开。'};
-      try { const value=await work(...args as IPCArguments<C>);if(/^(settings:(save|save-game-paths|save-desktop-preferences)|mods:(operate|import|replace|delete|choose-cover|group)|presets:(save|delete|apply)|ini:save|recovery:(create|restore)|xxmi:(deploy|sync))$/.test(channel)){await broadcast(/^(settings:(save|save-game-paths|save-desktop-preferences)|recovery:restore|xxmi:(deploy|sync))$/.test(channel));await updateTray();}return { ok: true, value }; }
+      try { const value=await work(...args as IPCArguments<C>);if(/^(settings:(save|save-game-paths|save-desktop-preferences)|mods:(operate|batch|exclusive-save|exclusive-delete|import|replace|delete|choose-cover|group)|presets:(save|add-members|delete|apply)|ini:save|recovery:(create|restore)|xxmi:(deploy|sync))$/.test(channel)){await broadcast(/^(settings:(save|save-game-paths|save-desktop-preferences)|recovery:restore|xxmi:(deploy|sync))$/.test(channel));await updateTray();}return { ok: true, value }; }
       catch (error) {
+        if(['mods:operate','mods:exclusive-save','recovery:restore'].includes(channel))await broadcast().catch(()=>{});
         const code = (error as NodeJS.ErrnoException).code;
         const errorText = code ? `目录操作失败（${code}），请检查路径和权限。` : (error as Error).message;
         return { ok: false, error: errorText || '操作失败，请检查路径和权限。' };
@@ -101,8 +102,9 @@ app.whenReady().then(async () => {
   handle('desktop:link',async (game:GameId,kind:'market'|'update')=>{const settings=await store.read();const url=resolveWebUrl(kind==='market'?settings.desktop?.marketUrl||'':settings.desktop?.updateUrl||'',game,kind);if(!url)throw new Error(kind==='market'?'尚未配置 Mod 网页入口，请在路径与加载器设置地址。':'尚未配置更新发布页，当前没有已发布版本或自动更新来源。');await shell.openExternal(url);return '网页打开请求已提交到默认浏览器。';});
   handle('presets:list',(game:GameId)=>business.presets(game));
   handle('presets:save',(game:GameId,id:string|null,name:string,members:Record<string,boolean>|null)=>business.savePreset(game,id,name,members));
+  handle('presets:add-members',(game,id,modIds)=>business.addModsToPreset(game,id,modIds));
   handle('presets:delete',(game:GameId,id:string)=>business.deletePreset(game,id));
-  handle('presets:apply',(game:GameId,id:string)=>business.applyPreset(game,id));
+  handle('presets:apply',(game,id,choices)=>business.applyPreset(game,id,choices));
   handle('ini:list',(game:GameId,id:string)=>ini.files(game,id));
   handle('ini:read',(game:GameId,id:string,file:string)=>ini.read(game,id,file));
   handle('ini:save',(game:GameId,id:string,file:string,digest:string,edit)=>ini.save(game,id,file,digest,edit));
@@ -116,6 +118,10 @@ app.whenReady().then(async () => {
   handle('xxmi:inspect', (game: GameId, root: string) => inspectXXMI(game, root));
   handle('mods:scan', (game: GameId) => mods.scan(game));
   handle('mods:operate', (game: GameId, id: string, operation: ModOperation) => mods.operate(game,id,operation));
+  handle('mods:batch',(game,ids,operation,choices)=>mods.batch(game,ids,operation,choices));
+  handle('mods:exclusive-save',(game,id,name,modIds,enabledId)=>mods.saveExclusiveGroup(game,id,name,modIds,enabledId));
+  handle('mods:exclusive-delete',(game,id)=>mods.deleteExclusiveGroup(game,id));
+  handle('mods:source',async(game,id)=>{const url=await mods.sourceUrl(game,id);await shell.openExternal(url);return '来源网页打开请求已提交。';});
   handle('mods:cover', (game: GameId,id: string) => mods.cover(game,id));
   handle('characters:covers',(game:GameId)=>characterCovers.read(game));
   handle('characters:choose-cover',async (game:GameId,name:string)=>{const source=await dialog.showOpenDialog(window!,{title:'选择角色文件夹封面',properties:['openFile'],filters:[{name:'PNG / JPEG 图片',extensions:['png','jpg','jpeg']}]});if(source.canceled)return null;const result=await characterCovers.choose(game,name,source.filePaths[0]);await broadcast();return result;});

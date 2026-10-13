@@ -4,7 +4,9 @@ Electron + React + TypeScript 本地 Windows 工具，支持绝区零/终末地�
 
 正式首版目标为 **0.0.1**，新增管理器更新器：设置页检查稳定版本、查看说明、确认下载、校验、退出后替换并重启。默认源为 [KiriuKazurei/KiriuModManager](https://github.com/KiriuKazurei/KiriuModManager)，支持其它 HTTPS 更新清单；源码模式不替换目录。详见[管理器更新与发布说明](docs/管理器更新与发布说明.md)。正式 GitHub Release 需要上传完整 ZIP 与 kmm-update.json，源码推送本身不会产生可用更新。
 
-当前文档入口：[docs 导航](docs/README.md)、[项目技术说明](docs/项目技术说明.md)、[44 + 1 桌面接口文档](docs/桌面接口文档.md)、[XXMI 集成与部署](docs/XXMI集成与部署说明.md)。旧工程/分工/研究资料本地保留在 docs/disable，不属于发布源码必需文件。
+三项重点迭代已接入：列表多选与批量管理、手动角色外观互斥组、Mod 来源及版本历史。主窗/浮窗/批量/预设统一执行互斥规则，冲突先选择再操作；来源状态为人工记录。详见[重点迭代功能说明](docs/重点迭代功能说明.md)。后续正式版本号按发布安排确定。
+
+当前文档入口：[docs 导航](docs/README.md)、[项目技术说明](docs/项目技术说明.md)、[49 + 1 桌面接口文档](docs/桌面接口文档.md)、[XXMI 集成与部署](docs/XXMI集成与部署说明.md)。旧工程/分工/研究资料本地保留在 docs/disable，不属于发布源码必需文件。
 
 需要 Node.js 22.12+；本机使用 Node 24。当前源码命令：
 

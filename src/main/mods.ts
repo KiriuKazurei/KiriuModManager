@@ -1,14 +1,17 @@
 import { promises as fs, constants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { GameId, GAMES, GamePaths, LibrarySnapshot, ModEntry, ModMetadata, ModOperation, ImportResult } from '../shared/contracts';
+import { GameId, GAMES, GamePaths, LibrarySnapshot, ModEntry, ModMetadata, ModOperation, ImportResult,ModProvenance,ExclusiveGroup,ExclusiveChoices,BatchModOperation,BatchModResult,BatchModItem } from '../shared/contracts';
 import { INITIAL_CHARACTERS, CHARACTER_ALIASES } from '../shared/characters';
 import { assertNoLinks, containedPath } from './archive';
 import { extractModArchive } from './mod-archive';
 import { inspectXXMI } from './xxmi';
 import { RecoveryStore } from './recovery';
-interface RecordEntry { id: string; relativePath: string; metadata: ModMetadata; cover?: string; deleted?: string }
-interface LibraryData { version: 1; root: string; records: Record<string, RecordEntry>; groups: { category: string[]; character: string[]; appearance: string[] }; characterCovers?:Record<string,string> }
+import {emptyProvenance,editableProvenance} from '../shared/mod-provenance';
+import {readProvenance,updateProvenance} from './mod-provenance';
+import {exclusiveRequests} from './exclusive-groups';
+interface RecordEntry { id: string; relativePath: string; metadata: ModMetadata; provenance?:ModProvenance; cover?: string; deleted?: string }
+interface LibraryData { version: 1; root: string; records: Record<string, RecordEntry>; groups: { category: string[]; character: string[]; appearance: string[] }; characterCovers?:Record<string,string>;exclusiveGroups?:ExclusiveGroup[] }
 const disabled = (name: string) => /^DISABLED/i.test(name);
 const clean = (name: string) => name.replace(/^DISABLED_?/i, '');
 const metadata = (): ModMetadata => ({ category:'', character:'', appearance:'', author:'', description:'' });
@@ -19,6 +22,9 @@ export function safeName(value: unknown, allowEmpty = false): string {
   if (!name && allowEmpty) return '';
   if (!name || name.length > 120 || /[<>:"/\\|?*\x00-\x1f]/.test(name) || /[. ]$/.test(name) || /^(\.|\.\.|CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(name)) throw new Error('名称不能为空，也不能包含路径符号或 Windows 保留名称。');
   return name;
+}
+export function selectedModIds(ids:unknown):string[] {
+ if(!Array.isArray(ids)||!ids.length||ids.length>5000||ids.some(id=>typeof id!=='string'||!id)||new Set(ids).size!==ids.length)throw new Error('请选择 1–5000 个不重复的 Mod 身份。');return ids;
 }
 function relation(parent: string, child: string) { const relative = path.relative(parent, child); return !relative || !relative.startsWith('..') && !path.isAbsolute(relative); }
 async function present(file: string) { try { await fs.lstat(file); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; } }
@@ -81,7 +87,7 @@ export class ModService {
   async characterCoverReferences(game:GameId){return (await this.load(game)).characterCovers||{};}
   async setCharacterCoverReference(game:GameId,name:string,file:string){const data=await this.load(game);data.characterCovers={...data.characterCovers,[name]:file};await this.save(game,data);}
   async context(game:GameId,id?:string){const data=await this.load(game);return {data,...(id?await this.resolve(data,id):{record:undefined,directory:data.root})};}
-  async recoverRecord(game:GameId,input:unknown){const data=await this.load(game);const record=input as RecordEntry;if(!record||typeof record.id!=='string'||!record.relativePath)throw new Error('恢复元数据格式无效。');containedPath(data.root,record.relativePath);record.metadata=validateMetadata(record.metadata);delete record.deleted;data.records[record.id]=record;await this.save(game,data);return this.scan(game);}
+  async recoverRecord(game:GameId,input:unknown){const data=await this.load(game);const record=input as RecordEntry;if(!record||typeof record.id!=='string'||!record.relativePath)throw new Error('恢复元数据格式无效。');containedPath(data.root,record.relativePath);record.metadata=validateMetadata(record.metadata);if(record.provenance)record.provenance=readProvenance(record.provenance);delete record.deleted;data.records[record.id]=record;await this.save(game,data);const snapshot=await this.scan(game);if(snapshot.mods.find(mod=>mod.id===record.id)?.enabled&&snapshot.exclusiveGroups.some(group=>group.modIds.includes(record.id)))return this.operate(game,record.id,{kind:'toggle',enabled:true});return snapshot;}
   private file(game: GameId) { if (!Object.hasOwn(GAMES, game)) throw new Error('不支持的游戏。'); return path.join(this.dataDirectory, `library-${game}.json`); }
   private async load(game: GameId): Promise<LibraryData> {
     this.file(game);
@@ -95,6 +101,11 @@ export class ModService {
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Mod 元数据配置无法读取，原文件已保留。'); }
     if (data && (data.version !== 1 || !data.records || !data.groups || typeof data.root !== 'string')) throw new Error('Mod 元数据配置格式无效，原文件已保留。');
     if (!data || data.root.toLowerCase() !== root.toLowerCase()) data = { version:1, root, records:{}, groups:{ category:[...initialCategories], character:[], appearance:[] } };
+    if(data.exclusiveGroups!==undefined){
+      if(!Array.isArray(data.exclusiveGroups))throw new Error('互斥组配置格式无效，原文件已保留。');
+      const groups=new Set<string>();const members=new Set<string>();
+      for(const group of data.exclusiveGroups){if(!group||typeof group.id!=='string'||!group.id||groups.has(group.id)||safeName(group.name)!==group.name||!Array.isArray(group.modIds)||group.modIds.length<2||group.modIds.some(id=>typeof id!=='string'||!Object.hasOwn(data!.records,id)||members.has(id)))throw new Error('互斥组配置格式无效，原文件已保留。');groups.add(group.id);for(const id of group.modIds){if(members.has(id))throw new Error('Mod 不能属于多个互斥组。');members.add(id);}}
+    }
     return data;
   }
   private async save(game: GameId, data: LibraryData) { await fs.mkdir(this.dataDirectory, { recursive:true }); await fs.writeFile(this.file(game), JSON.stringify(data, null, 2), 'utf8'); }
@@ -112,7 +123,7 @@ export class ModService {
     let iniCount = 0;
     const count = async (folder: string) => { for (const entry of await fs.readdir(folder, { withFileTypes:true })) { if (entry.isFile() && modIni(entry.name)) iniCount++; if (entry.isDirectory() && !entry.isSymbolicLink()) await count(path.join(folder, entry.name)); } }; await count(directory);
     if (!record.cover && covers) record.cover = covers;
-    return { id:record.id, name:clean(parts.at(-1)!), relativePath:record.relativePath, metadata:record.metadata, enabled:!ownDisabled && !disabledAncestors.length, ownDisabled, disabledAncestors, hasCover:!!record.cover && await present(containedPath(directory, record.cover)), iniCount };
+    return { id:record.id, name:clean(parts.at(-1)!), relativePath:record.relativePath, metadata:record.metadata,provenance:readProvenance(record.provenance), enabled:!ownDisabled && !disabledAncestors.length, ownDisabled, disabledAncestors, hasCover:!!record.cover && await present(containedPath(directory, record.cover)), iniCount };
   }
   async scan(game: GameId): Promise<LibrarySnapshot> {
     const data = await this.load(game); const relativePaths = await discover(data.root, new Set(Object.values(data.records).filter(record=>!record.deleted).map(record=>record.relativePath)));
@@ -131,12 +142,38 @@ export class ModService {
     } catch { /* reports the missing loader below */ }
     if (!loaderMatched) warnings.push('当前 Mod 目录不在所选 loader 已确认的读取范围。管理操作仍可保存，但不代表游戏会加载；请到路径与加载器同步目录。');
     if (!excludeMatched) warnings.push('未确认 loader 的 exclude_recursive = DISABLED* 规则。目录停用不代表游戏已停用，请检查 XXMI 配置。');
-    return { gameId:game, root:data.root, mods:mods.sort((a,b)=>a.name.localeCompare(b.name,'zh-CN')), warnings, loaderMatched, excludeMatched, characters:[...new Set([...INITIAL_CHARACTERS[game],...data.groups.character,...mods.map(mod=>mod.metadata.character).filter(Boolean)])], categories:[...new Set([...data.groups.category,...mods.map(mod=>mod.metadata.category).filter(Boolean)])], appearances:[...new Set([...data.groups.appearance,...mods.map(mod=>mod.metadata.appearance).filter(Boolean)])] };
+    for(const group of data.exclusiveGroups||[])if(mods.filter(mod=>group.modIds.includes(mod.id)&&mod.enabled).length>1)warnings.push(`互斥组“${group.name}”有多个实际启用成员，请明确选择一个启用。`);
+    return { gameId:game, root:data.root, mods:mods.sort((a,b)=>a.name.localeCompare(b.name,'zh-CN')),exclusiveGroups:data.exclusiveGroups||[], warnings, loaderMatched, excludeMatched, characters:[...new Set([...INITIAL_CHARACTERS[game],...data.groups.character,...mods.map(mod=>mod.metadata.character).filter(Boolean)])], categories:[...new Set([...data.groups.category,...mods.map(mod=>mod.metadata.category).filter(Boolean)])], appearances:[...new Set([...data.groups.appearance,...mods.map(mod=>mod.metadata.appearance).filter(Boolean)])] };
   }
-  async operate(game: GameId, id: string, operation: ModOperation): Promise<LibrarySnapshot> {
+  private async preflightToggle(data:LibraryData,id:string,enabled:boolean){
+    const {record,directory}=await this.resolve(data,id);
+    if(enabled&&(record.relativePath.split(path.sep).slice(0,-1).some(disabled)||disabled(path.basename(data.root))))throw new Error('父分类目录已停用。请先移动到启用分类，不能仅改名内层目录来启用。');
+    const destination=path.join(path.dirname(directory),enabled?clean(path.basename(directory)):`DISABLED_${clean(path.basename(directory))}`);
+    await assertNoLinks(destination);if(destination.toLowerCase()!==directory.toLowerCase()&&await present(destination))throw new Error('目标已有同名 Mod，未覆盖。');
+  }
+  private async switchExclusive(game:GameId,id:string,members:string[]):Promise<LibrarySnapshot>{
+    const snapshot=await this.scan(game);const data=await this.load(game);await this.preflightToggle(data,id,true);
+    const peers=snapshot.mods.filter(mod=>mod.id!==id&&members.includes(mod.id)&&mod.enabled);
+    for(const peer of peers)await this.preflightToggle(data,peer.id,false);
+    const changed:string[]=[];
+    try{for(const peer of peers){await this.operateDirect(game,peer.id,{kind:'toggle',enabled:false});changed.push(peer.id);}return await this.operateDirect(game,id,{kind:'toggle',enabled:true});}
+    catch(error){const issues:string[]=[];const target=snapshot.mods.find(mod=>mod.id===id);if(target&&!target.enabled){try{await this.operateDirect(game,id,{kind:'toggle',enabled:false});}catch(e){issues.push((e as Error).message);}}
+      for(const peer of changed.reverse())try{await this.operateDirect(game,peer,{kind:'toggle',enabled:true});}catch(e){issues.push((e as Error).message);}
+      throw new Error(`${(error as Error).message}${issues.length?'；回退未完成，请重新扫描核对：'+issues.join('；'):''}`);
+    }
+  }
+  async operate(game:GameId,id:string,operation:ModOperation):Promise<LibrarySnapshot>{
+    if(operation?.kind==='toggle'&&operation.enabled===true){const data=await this.load(game);const group=data.exclusiveGroups?.find(group=>group.modIds.includes(id));if(group)return this.switchExclusive(game,id,group.modIds);}
+    const result=await this.operateDirect(game,id,operation);
+    // A move out of a disabled ancestor or a rename removing DISABLED also enables content.
+    if(['classify','rename'].includes(operation.kind)&&result.mods.find(mod=>mod.id===id)?.enabled){const group=result.exclusiveGroups.find(group=>group.modIds.includes(id));if(group)return this.switchExclusive(game,id,group.modIds);}
+    return result;
+  }
+  private async operateDirect(game: GameId, id: string, operation: ModOperation): Promise<LibrarySnapshot> {
     const data=await this.load(game); const {record,directory}=await this.resolve(data,id);
     if (!operation || typeof operation!=='object') throw new Error('操作格式无效。');
     if (operation.kind==='metadata') record.metadata=validateMetadata(operation.metadata);
+    else if(operation.kind==='provenance')record.provenance=updateProvenance(record.provenance,operation.fields,'edited');
     else {
       let destination=directory; const leaf=path.basename(directory); const base=clean(leaf);
       if (operation.kind==='toggle') {
@@ -163,6 +200,43 @@ export class ModService {
     }
     await this.save(game,data); return this.scan(game);
   }
+  async batch(game:GameId,ids:string[],operation:BatchModOperation,choices?:ExclusiveChoices):Promise<BatchModResult>{
+    selectedModIds(ids);if(!operation||!['toggle','classify'].includes(operation.kind))throw new Error('批量操作只支持启停或分类移动。');
+    if(operation.kind==='toggle'){if(typeof operation.enabled!=='boolean')throw new Error('启停状态无效。');return this.applyStates(game,Object.fromEntries(ids.map(id=>[id,operation.enabled])),choices);}
+    for(const value of [operation.category,operation.character,operation.appearance]){const label=safeName(value,true);if(disabled(label))throw new Error('分类名称不能使用 DISABLED 前缀。');}
+    const items:BatchModItem[]=[];let library=await this.scan(game);
+    const active=library.mods.filter(mod=>ids.includes(mod.id)&&!mod.ownDisabled).map(mod=>mod.id);const plan=exclusiveRequests(library.exclusiveGroups,active,choices);
+    if(plan.conflicts.length)return {library,items:[],conflicts:plan.conflicts};
+    for(const id of ids){const target=library.mods.find(mod=>mod.id===id);const name=target?.name||id;try{if(target&&!target.ownDisabled&&active.includes(id)&&!plan.enabled.has(id))library=await this.operate(game,id,{kind:'toggle',enabled:false});library=await this.operate(game,id,operation);items.push({id,name,ok:true,message:active.includes(id)&&!plan.enabled.has(id)?'按互斥选择停用后移动':undefined});}catch(error){items.push({id,name,ok:false,error:(error as Error).message});library=await this.scan(game);}}
+    return {library,items,conflicts:[]};
+  }
+  async applyStates(game:GameId,states:Record<string,boolean>,choices?:ExclusiveChoices):Promise<BatchModResult>{
+    if(!states||typeof states!=='object'||Array.isArray(states)||Object.values(states).some(value=>typeof value!=='boolean'))throw new Error('启停成员格式无效。');
+    const ids=Object.keys(states);if(ids.length)selectedModIds(ids);let library=await this.scan(game);
+    const plan=exclusiveRequests(library.exclusiveGroups,ids.filter(id=>states[id]&&library.mods.some(mod=>mod.id===id)),choices);
+    if(plan.conflicts.length)return {library,items:[],conflicts:plan.conflicts};
+    const items:BatchModItem[]=[];const ordered=ids.sort((a,b)=>Number(plan.enabled.has(a))-Number(plan.enabled.has(b)));
+    for(const id of ordered){const target=library.mods.find(mod=>mod.id===id);const name=target?.name||id;const enabled=plan.enabled.has(id);
+      if(!target){items.push({id,name,ok:false,error:`缺失成员：${id}`});continue;}
+      try{const before=library.mods.filter(mod=>mod.enabled).map(mod=>mod.id);if(target.enabled!==enabled||enabled)library=await this.operate(game,id,{kind:'toggle',enabled});
+        const disabledPeers=library.mods.filter(mod=>mod.id!==id&&before.includes(mod.id)&&!mod.enabled).map(mod=>mod.name);
+        items.push({id,name,ok:true,message:states[id]&&!enabled?'按互斥选择保持停用':disabledPeers.length?`同时停用互斥成员：${disabledPeers.join('、')}`:undefined});
+      }catch(error){items.push({id,name,ok:false,error:(error as Error).message});library=await this.scan(game);}
+    }
+    return {library,items,conflicts:[]};
+  }
+  async saveExclusiveGroup(game:GameId,id:string|null,name:string,modIds:string[],enabledId?:string):Promise<LibrarySnapshot>{
+    selectedModIds(modIds);if(modIds.length<2)throw new Error('互斥组至少需要两个成员。');const label=safeName(name);const snapshot=await this.scan(game);
+    if(id!==null&&(typeof id!=='string'||!snapshot.exclusiveGroups.some(group=>group.id===id)))throw new Error('互斥组不存在，请重新读取。');
+    if(modIds.some(id=>!snapshot.mods.some(mod=>mod.id===id)))throw new Error('互斥组含缺失或其它游戏的 Mod。');
+    if(snapshot.exclusiveGroups.some(group=>group.id!==id&&group.modIds.some(member=>modIds.includes(member))))throw new Error('一个 Mod 只能属于一个互斥组，请先从原组移除。');
+    if(enabledId!==undefined&&(typeof enabledId!=='string'||!modIds.includes(enabledId)))throw new Error('选择的启用成员不属于互斥组。');
+    if(enabledId===undefined&&snapshot.mods.filter(mod=>modIds.includes(mod.id)&&mod.enabled).length>1)throw new Error('所选成员中有多个已启用 Mod，请明确选择保存时启用的成员。');
+    if(enabledId!==undefined)await this.switchExclusive(game,enabledId,modIds);
+    const data=await this.load(game);const group={id:id||randomUUID(),name:label,modIds:[...modIds]};data.exclusiveGroups=[...(data.exclusiveGroups||[]).filter(item=>item.id!==id),group];await this.save(game,data);return this.scan(game);
+  }
+  async deleteExclusiveGroup(game:GameId,id:string):Promise<LibrarySnapshot>{const data=await this.load(game);if(typeof id!=='string'||!data.exclusiveGroups?.some(group=>group.id===id))throw new Error('互斥组不存在，请重新读取。');data.exclusiveGroups=data.exclusiveGroups.filter(group=>group.id!==id);await this.save(game,data);return this.scan(game);}
+  async sourceUrl(game:GameId,id:string):Promise<string>{const {record}=await this.context(game,id);const url=readProvenance(record!.provenance).sourceUrl;if(!url)throw new Error('尚未保存该 Mod 的来源地址。');return url;}
   async import(game: GameId, sources: string[]): Promise<ImportResult> {
     const data=await this.load(game); const ids:string[]=[]; const errors:string[]=[];
     for(const source of sources) {
@@ -184,7 +258,7 @@ export class ModService {
           destination=path.join(data.root,name);
           await copyDirectory(from,destination);
           const id=randomUUID(); const relativePath=path.relative(data.root,destination);
-          data.records[id]={id,relativePath,metadata:inferred(game,candidate||name,data.groups.category)}; ids.push(id); destination='';
+          data.records[id]={id,relativePath,metadata:inferred(game,candidate||name,data.groups.category),provenance:emptyProvenance(new Date().toISOString())}; ids.push(id); destination='';
         }
       } catch(error) {
         if(destination && relation(data.root,destination) && await present(destination)) {
@@ -202,6 +276,7 @@ export class ModService {
   }
   async replace(game:GameId,id:string,source:string):Promise<LibrarySnapshot> {
     const data=await this.load(game); const {record,directory}=await this.resolve(data,id); await assertNoLinks(source);
+    const provenance=updateProvenance(record.provenance,{...editableProvenance(readProvenance(record.provenance)),version:'',gameVersion:'',verification:'unverified'},'replaced');
     if(relation(directory,source)||relation(source,directory)||relation(data.root,source)) throw new Error('替换来源与已管理目录重叠。');
     const workRoot=path.join(this.dataDirectory,'replacements'); await fs.mkdir(workRoot,{recursive:true}); const work=await fs.mkdtemp(path.join(workRoot,'replace-'));
     let input=source; const stat=await fs.stat(source); if(stat.isFile()) { input=path.join(work,'unpacked'); await extractModArchive(source,input); }
@@ -215,6 +290,7 @@ export class ModService {
     const recovery=path.join(this.dataDirectory,'removed',game,recoveryItem.id);
     await fs.rm(directory,{recursive:true});
     try { await copyDirectory(payload,directory); } catch(error) { if(await present(directory)) await fs.rm(directory,{recursive:true}); await copyDirectory(recovery,directory); throw error; }
+    record.provenance=provenance;
     await this.save(game,data); return this.scan(game);
   }
   async cover(game:GameId,id:string):Promise<string|null> {
