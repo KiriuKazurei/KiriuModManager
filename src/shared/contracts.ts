@@ -1,3 +1,4 @@
+import type {InspectionJob,ReportOptions,DiagnosticExport,RestorePreview,CleanupPreview,CleanupJob,ConflictDetails,ManagedReference} from './inspections';
 export const GAMES = {
   zzz: { name: '绝区零', importer: 'ZZMI', subtitle: 'Zenless Zone Zero' },
   endfield: { name: '终末地', importer: 'EFMI', subtitle: 'Arknights: Endfield' },
@@ -9,8 +10,9 @@ export interface ModRemoteInfo {provider:'gamebanana';modId:number;fileId:number
 export interface ModBrowserBounds {x:number;y:number;width:number;height:number}
 export interface ModDownloadInstallItem {id?:string;name:string;ok:boolean;existing?:boolean;error?:string}
 export interface ModInstallDestination {entryPath:string;folder:string}
-export interface ModDownloadInstallPlan {targetRoot:string;folders:string[];items:(ModInstallDestination&{name:string;character:string})[]}
-export interface ModDownload {id:string;gameId:GameId;targetRoot:string;fileName:string;title:string;character?:string;stage:'binding'|'downloading'|'verifying'|'ready'|'installing'|'waiting-directory'|'complete'|'partial'|'error'|'canceled'|'interrupted';receivedBytes:number;totalBytes:number;archiveReady:boolean;message:string;importedIds:string[];items:ModDownloadInstallItem[];createdAt:string;updatedAt:string}
+export interface ModConfigChange {relativePath:string;kind:'added'|'removed'|'changed'|'same'}
+export interface ModDownloadInstallPlan {targetRoot:string;updateTarget?:ModUpdateTarget;updatePreview?:{name:string;relativePath:string;versionBefore:string;versionAfter:string;enabled:boolean;activeProfile:boolean};folders:string[];items:(ModInstallDestination&{name:string;character:string;configChanges?:ModConfigChange[]})[]}
+export interface ModDownload {id:string;gameId:GameId;targetRoot:string;purpose?:'new-install'|'update';updateTarget?:ModUpdateTarget;fileName:string;title:string;character?:string;stage:'binding'|'downloading'|'verifying'|'ready'|'installing'|'waiting-directory'|'complete'|'partial'|'error'|'canceled'|'interrupted';receivedBytes:number;totalBytes:number;archiveReady:boolean;message:string;importedIds:string[];items:ModDownloadInstallItem[];createdAt:string;updatedAt:string}
 export type ModDownloadAction='cancel'|'retry-download'|'retry-binding'|'retry-install'|'install-current'|'show-file';
 export interface ModBrowserStatus {gameId:GameId;url:string;loading:boolean;canGoBack:boolean;canGoForward:boolean;error:string;externalUrl:string;downloads:ModDownload[]}
 export interface GamePaths { xxmiRoot: string; gameDirectory: string; modsDirectory: string }
@@ -23,7 +25,7 @@ export interface Inspection {
   importerDirectory: string; importerExists: boolean; iniPath: string; gameDirectory: string;
   modsDirectories: string[]; modsExist: boolean[]; installed: boolean; warnings: string[];
 }
-export type Result<T> = { ok: true; value: T } | { ok: false; error: string };
+export type Result<T> = { ok: true; value: T } | { ok: false; error: string; code?:string; details?:DependencyPlan };
 export interface RuntimeStatus { installed: boolean; message: string; downloadUrl: string }
 export interface DeploymentProgress { stage: 'idle' | 'resolve' | 'download' | 'verify' | 'extract' | 'configure' | 'complete' | 'error'; message: string; percent: number; bytes?: number; totalBytes?: number }
 export interface DeploymentResult { settings: Settings; inspection: Inspection; versions: Record<string, string>; runtime: RuntimeStatus; filesDeployed: boolean; ready: boolean; backupDirectory?: string }
@@ -35,21 +37,33 @@ export interface ModProvenance extends ModProvenanceFields {importedAt:string;hi
 export interface ExclusiveGroup {id:string;name:string;modIds:string[]}
 export interface ExclusiveConflict {groupId:string;name:string;candidateIds:string[]}
 export type ExclusiveChoices=Record<string,string>;
-export interface ModEntry { id: string; name: string; relativePath: string; metadata: ModMetadata; provenance:ModProvenance; remote?:ModRemoteInfo; enabled: boolean; ownDisabled: boolean; disabledAncestors: string[]; hasCover: boolean; iniCount: number }
+export interface ModRequirements {mods:{modId:string;minimumVersion?:string}[];components:{component:'launcher'|'xxmi'|'importer';minimumVersion:string}[];gameVersion?:string;origin:'manual'|'author-stated';note?:string}
+export interface DependencyIssue {modId:string;message:string;severity:'block'|'warning'}
+export interface DependencyRequest {states?:Record<string,boolean>;deleteId?:string}
+export interface DependencyPlan {token:string;states:Record<string,boolean>;issues:DependencyIssue[];dependents:string[];versions:Record<'launcher'|'xxmi'|'importer',string|null>}
+export interface DependencyConfirmation {token:string;acceptWarnings:boolean}
+export interface ActiveProfile {presetId:string;revision:string;members:Record<string,boolean>;files:{modId:string;relativePath:string;digest:string}[]}
+export interface ModEntry { id: string; name: string; relativePath: string; metadata: ModMetadata; provenance:ModProvenance; remote?:ModRemoteInfo; favorite?:boolean; tags?:string[]; contentRevision?:string; requirements?:ModRequirements; enabled: boolean; ownDisabled: boolean; disabledAncestors: string[]; hasCover: boolean; iniCount: number }
 export interface LibrarySnapshot { gameId: GameId; root: string; mods: ModEntry[]; exclusiveGroups:ExclusiveGroup[]; warnings: string[]; characters: string[]; categories: string[]; appearances: string[]; loaderMatched: boolean; excludeMatched: boolean }
-export type ModOperation = { kind: 'toggle'; enabled: boolean } | { kind: 'rename'; name: string } | { kind: 'classify'; category: string; character: string; appearance: string } | { kind: 'metadata'; metadata: ModMetadata } | {kind:'provenance';fields:ModProvenanceFields};
+export type ModOperation = { kind: 'toggle'; enabled: boolean } | { kind: 'rename'; name: string } | { kind: 'classify'; category: string; character: string; appearance: string } | { kind: 'metadata'; metadata: ModMetadata } | {kind:'provenance';fields:ModProvenanceFields} | {kind:'favorite';value:boolean} | {kind:'tags';values:string[]} | {kind:'requirements';value:ModRequirements};
 export type BatchModOperation=Extract<ModOperation,{kind:'toggle'|'classify'}>;
 export interface BatchModItem {id:string;name:string;ok:boolean;error?:string;message?:string}
 export interface BatchModResult {library:LibrarySnapshot;items:BatchModItem[];conflicts:ExclusiveConflict[]}
 export interface ImportResult { library: LibrarySnapshot; importedIds: string[]; errors: string[]; canceled: boolean }
-export interface Preset { id:string; name:string; members:Record<string,boolean>; updatedAt:string }
+export interface Preset { id:string; name:string; members:Record<string,boolean>; updatedAt:string; mode?:'states'|'profile';profileRef?:{revision:string} }
+export interface ProfileScope {modId:string;relativePath:string}
+export interface ProfileStatus {active?:ActiveProfile;dirty:boolean;issues:string[];files:(ProfileScope&{sourceRevision:string;digest:string})[]}
+export interface ProfileApplyPlan {token:string;presetId:string;dirty:boolean;strategy:'backup'|'save';issues:string[];dependency:DependencyPlan;files:ProfileScope[]}
+export interface ModUpdateCandidate {id:string;remote:ModRemoteInfo;version:string}
+export interface ModUpdateCheck {modId:string;status:'current'|'options'|'newer'|'changed'|'manual'|'error';message:string;candidates:ModUpdateCandidate[]}
+export interface ModUpdateTarget {modId:string;contentRevision:string;candidateVersion:string;root?:string;candidateFingerprint?:string}
 export interface PresetApplyResult { library:LibrarySnapshot; issues:string[]; applied:number; conflicts:ExclusiveConflict[] }
 export interface IniKey { section:string; line:number; key:string; back:string; keyLine?:number; backLine?:number }
 export interface IniDocument { relativePath:string; text:string; encoding:string; newline:string; digest:string; keys:IniKey[] }
 export type IniEdit = {kind:'text';text:string} | {kind:'keys';keys:IniKey[]};
 export interface HashLocation { modId:string;modName:string;relativePath:string;line:number }
 export interface ConflictReport { candidates:{hash:string;locations:HashLocation[]}[]; warnings:string[]; scannedMods:number }
-export interface RecoveryItem { id:string;gameId:GameId;root:string;kind:'mod-delete'|'mod-replace'|'ini'|'snapshot'|'legacy';name:string;createdAt:string;relativePath?:string;includesContent:boolean;manualLocation?:string }
+export interface RecoveryItem { id:string;gameId:GameId;root:string;kind:'mod-delete'|'mod-replace'|'ini'|'snapshot'|'legacy'|'interrupted';name:string;createdAt:string;relativePath?:string;includesContent:boolean;manualLocation?:string }
 export interface AppUpdateRelease { version:string; notes:string; publishedAt:string; url:string; sha256:string; size:number }
 export interface AppUpdateStatus {
   stage:'idle'|'checking'|'available'|'current'|'downloading'|'verifying'|'ready'|'installing'|'error';
@@ -57,6 +71,21 @@ export interface AppUpdateStatus {
   lastResult?:{stage:string;message:string;backup?:string};
 }
 export interface DesktopAPI {
+  startDiagnostics(game:GameId):Promise<Result<InspectionJob>>;
+  startRecoveryInventory(game:GameId):Promise<Result<InspectionJob>>;
+  startConflictInspection(game:GameId):Promise<Result<InspectionJob>>;
+  readInspectionJob(id:string):Promise<Result<InspectionJob>>;
+  cancelInspectionJob(id:string):Promise<Result<InspectionJob>>;
+  previewDiagnosticExport(id:string,options:ReportOptions):Promise<Result<DiagnosticExport>>;
+  exportDiagnosticReport(id:string,format:'markdown'|'json',options:ReportOptions):Promise<Result<string|null>>;
+  setRecoveryProtection(game:GameId,ids:string[],value:boolean):Promise<Result<Record<string,boolean>>>;
+  prepareRecoveryRestore(game:GameId,id:string):Promise<Result<InspectionJob>>;
+  applyRecoveryRestore(game:GameId,token:string,confirmation?:DependencyConfirmation):Promise<Result<LibrarySnapshot|null>>;
+  prepareRecoveryCleanup(game:GameId,ids:string[]):Promise<Result<CleanupPreview>>;
+  applyRecoveryCleanup(game:GameId,token:string):Promise<Result<CleanupJob|null>>;
+  manageRecoveryCleanup(game:GameId,id:string,action:'read'|'continue'|'undo'|'cancel'):Promise<Result<CleanupJob|null>>;
+  conflictDetails(game:GameId,resultId:string,groupId:string,offset?:number):Promise<Result<ConflictDetails>>;
+  revealManagedLocation(game:GameId,reference:ManagedReference):Promise<Result<void>>;
   setWindowTheme(theme:'day'|'night'):Promise<Result<void>>;
   setModBrowser(game:GameId,bounds:ModBrowserBounds|null):Promise<Result<ModBrowserStatus>>;
   modBrowserStatus():Promise<Result<ModBrowserStatus>>;
@@ -79,14 +108,15 @@ export interface DesktopAPI {
   checkRuntime(): Promise<Result<RuntimeStatus>>;
   openRuntimeDownload(): Promise<Result<void>>;
   scanMods(game: GameId): Promise<Result<LibrarySnapshot>>;
-  operateMod(game: GameId, id: string, operation: ModOperation): Promise<Result<LibrarySnapshot>>;
-  batchMods(game:GameId,ids:string[],operation:BatchModOperation,choices?:ExclusiveChoices):Promise<Result<BatchModResult>>;
-  saveExclusiveGroup(game:GameId,id:string|null,name:string,modIds:string[],enabledId?:string):Promise<Result<LibrarySnapshot>>;
+  operateMod(game: GameId, id: string, operation: ModOperation,confirmation?:DependencyConfirmation): Promise<Result<LibrarySnapshot>>;
+  dependencyCheck(game:GameId,request:DependencyRequest):Promise<Result<DependencyPlan>>;
+  batchMods(game:GameId,ids:string[],operation:BatchModOperation,choices?:ExclusiveChoices,confirmation?:DependencyConfirmation):Promise<Result<BatchModResult>>;
+  saveExclusiveGroup(game:GameId,id:string|null,name:string,modIds:string[],enabledId?:string,confirmation?:DependencyConfirmation):Promise<Result<LibrarySnapshot>>;
   deleteExclusiveGroup(game:GameId,id:string):Promise<Result<LibrarySnapshot>>;
   openModSource(game:GameId,id:string):Promise<Result<string>>;
   importMods(game: GameId, kind: 'folder' | 'archive'): Promise<Result<ImportResult>>;
-  replaceMod(game: GameId, id: string, kind: 'folder' | 'archive'): Promise<Result<LibrarySnapshot | null>>;
-  deleteMod(game: GameId, id: string): Promise<Result<LibrarySnapshot | null>>;
+  replaceMod(game: GameId, id: string, kind: 'folder' | 'archive',confirmation?:DependencyConfirmation): Promise<Result<LibrarySnapshot | null>>;
+  deleteMod(game: GameId, id: string,confirmation?:DependencyConfirmation): Promise<Result<LibrarySnapshot | null>>;
   cover(game: GameId, id: string): Promise<Result<string | null>>;
   characterCovers(game:GameId):Promise<Result<Record<string,string>>>;
   chooseCharacterCover(game:GameId,name:string):Promise<Result<LibrarySnapshot|null>>;
@@ -96,14 +126,23 @@ export interface DesktopAPI {
   savePreset(game:GameId,id:string|null,name:string,members:Record<string,boolean>|null):Promise<Result<Preset[]>>;
   addModsToPreset(game:GameId,id:string,modIds:string[]):Promise<Result<Preset[]>>;
   deletePreset(game:GameId,id:string):Promise<Result<Preset[]>>;
-  applyPreset(game:GameId,id:string,choices?:ExclusiveChoices):Promise<Result<PresetApplyResult>>;
+  applyPreset(game:GameId,id:string,choices?:ExclusiveChoices,confirmation?:DependencyConfirmation):Promise<Result<PresetApplyResult>>;
+  profileScope(game:GameId,id:string|null):Promise<Result<ProfileScope[]>>;
+  profileCapture(game:GameId,id:string|null,name:string,scope:ProfileScope[]):Promise<Result<Preset[]>>;
+  profileDuplicate(game:GameId,id:string,name:string):Promise<Result<Preset[]>>;
+  profileStatus(game:GameId,id:string):Promise<Result<ProfileStatus>>;
+  profilePrepareApply(game:GameId,id:string,choices?:ExclusiveChoices,strategy?:'backup'|'save'):Promise<Result<ProfileApplyPlan>>;
+  profileApply(game:GameId,token:string,strategy:'backup'|'save'|'cancel',confirmation?:DependencyConfirmation):Promise<Result<LibrarySnapshot|null>>;
+  readProfileIni(game:GameId,id:string,file:ProfileScope):Promise<Result<IniDocument>>;
+  checkModUpdates(game:GameId,ids:string[]):Promise<Result<ModUpdateCheck[]>>;
+  prepareModUpdate(game:GameId,id:string,candidateId:string):Promise<Result<ModBrowserStatus|null>>;
   iniFiles(game:GameId,id:string):Promise<Result<string[]>>;
   readIni(game:GameId,id:string,relativePath:string):Promise<Result<IniDocument>>;
   saveIni(game:GameId,id:string,relativePath:string,digest:string,edit:IniEdit):Promise<Result<IniDocument>>;
   conflicts(game:GameId):Promise<Result<ConflictReport>>;
   recovery(game:GameId):Promise<Result<RecoveryItem[]>>;
   createBackup(game:GameId,name:string):Promise<Result<RecoveryItem[]>>;
-  restore(game:GameId,id:string):Promise<Result<LibrarySnapshot|null>>;
+  restore(game:GameId,id:string,confirmation?:DependencyConfirmation):Promise<Result<LibrarySnapshot|null>>;
   desktopStatus():Promise<Result<DesktopStatus>>;
   floating(visible:boolean):Promise<Result<void>>;
   showMain():Promise<Result<void>>;

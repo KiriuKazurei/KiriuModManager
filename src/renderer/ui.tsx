@@ -1,5 +1,6 @@
-import { Result } from '../shared/contracts';
+import { Result,DependencyConfirmation } from '../shared/contracts';
 export function unwrap<T>(result:Result<T>):T {if(!result.ok) throw new Error(result.error); return result.value;}
+export async function guarded<T>(work:(confirmation?:DependencyConfirmation)=>Promise<Result<T>>):Promise<T>{const result=await work();if(result.ok)return result.value;if(result.code==='DEPENDENCY_CONFIRMATION'&&result.details){if(result.details.issues.some(i=>i.severity==='block'))throw new Error(result.error);if(!window.confirm(result.error+'\n\n接受本次操作的提示并继续？'))throw new Error('已取消操作。');return unwrap(await work({token:result.details.token,acceptWarnings:true}));}return unwrap(result);}
 export function OperationFeedback({error,message,quiet}:{error:string;message:string;quiet:string}){
   return <div className="feedback" aria-live="polite">{message?<p className="success">{message}</p>:null}{error?<p className="error" role="alert">{error}</p>:null}{!message&&!error?<p className="quiet">{quiet}</p>:null}</div>;
 }

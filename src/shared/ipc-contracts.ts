@@ -2,6 +2,22 @@ import type {DesktopAPI,Result} from './contracts';
 
 // Type-only correspondence: sandbox preload must not require this file at runtime.
 export interface IPCContracts {
+  'inspection:diagnostics':DesktopAPI['startDiagnostics'];
+  'inspection:inventory':DesktopAPI['startRecoveryInventory'];
+  'inspection:conflicts':DesktopAPI['startConflictInspection'];
+  'inspection:read':DesktopAPI['readInspectionJob'];
+  'inspection:cancel':DesktopAPI['cancelInspectionJob'];
+  'diagnostics:preview':DesktopAPI['previewDiagnosticExport'];
+  'diagnostics:export':DesktopAPI['exportDiagnosticReport'];
+  'recovery:protect':DesktopAPI['setRecoveryProtection'];
+  'recovery:prepare-restore':DesktopAPI['prepareRecoveryRestore'];
+  'recovery:apply-restore':DesktopAPI['applyRecoveryRestore'];
+  'recovery:prepare-cleanup':DesktopAPI['prepareRecoveryCleanup'];
+  'recovery:apply-cleanup':DesktopAPI['applyRecoveryCleanup'];
+  'recovery:cleanup-job':DesktopAPI['manageRecoveryCleanup'];
+  'conflicts:details':DesktopAPI['conflictDetails'];
+  'inspection:reveal':DesktopAPI['revealManagedLocation'];
+
   'desktop:window-theme':DesktopAPI['setWindowTheme'];
   'market:view':DesktopAPI['setModBrowser'];
   'market:status':DesktopAPI['modBrowserStatus'];
@@ -25,6 +41,9 @@ export interface IPCContracts {
   'runtime:download':DesktopAPI['openRuntimeDownload'];
   'mods:scan':DesktopAPI['scanMods'];
   'mods:operate':DesktopAPI['operateMod'];
+  'mods:dependencies':DesktopAPI['dependencyCheck'];
+  'mods:updates':DesktopAPI['checkModUpdates'];
+  'mods:prepare-update':DesktopAPI['prepareModUpdate'];
   'mods:batch':DesktopAPI['batchMods'];
   'mods:exclusive-save':DesktopAPI['saveExclusiveGroup'];
   'mods:exclusive-delete':DesktopAPI['deleteExclusiveGroup'];
@@ -42,6 +61,13 @@ export interface IPCContracts {
   'presets:add-members':DesktopAPI['addModsToPreset'];
   'presets:delete':DesktopAPI['deletePreset'];
   'presets:apply':DesktopAPI['applyPreset'];
+  'profiles:scope':DesktopAPI['profileScope'];
+  'profiles:capture':DesktopAPI['profileCapture'];
+  'profiles:duplicate':DesktopAPI['profileDuplicate'];
+  'profiles:status':DesktopAPI['profileStatus'];
+  'profiles:prepare':DesktopAPI['profilePrepareApply'];
+  'profiles:apply':DesktopAPI['profileApply'];
+  'profiles:read':DesktopAPI['readProfileIni'];
   'ini:list':DesktopAPI['iniFiles'];
   'ini:read':DesktopAPI['readIni'];
   'ini:save':DesktopAPI['saveIni'];

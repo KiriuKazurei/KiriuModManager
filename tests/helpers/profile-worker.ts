@@ -1,0 +1,8 @@
+import {promises as fs} from 'node:fs';
+import path from 'node:path';
+import {SettingsStore} from '../../src/main/settings';
+import {ModService} from '../../src/main/mods';
+import {BusinessService} from '../../src/main/business';
+import {OperationLog} from '../../src/main/operation-log';
+async function main(){const [run,game,presetId,point]=process.argv.slice(2);if(!path.resolve(run).startsWith(path.resolve('.run-data/v004-tests')+path.sep)||!['zzz','endfield'].includes(game))throw new Error('Owned profile fixture required');const gameId=game as 'zzz'|'endfield',data=path.join(run,'data'),store=new SettingsStore(data),mods=new ModService(data,async game=>(await store.read()).games[game]),business=new BusinessService(data,mods,store);const plan=await business.profiles.prepare(gameId,presetId);const rename=fs.rename;let paused=false;process.on('message',()=>{});fs.rename=async(from,to)=>{await rename(from,to);let match=point==='ini-written'&&String(to).endsWith(path.sep+'main.ini')||point==='flags-moved'&&String(to).endsWith(path.sep+'DISABLED_Other')||point==='metadata-saved'&&String(to)===path.join(data,'library-'+gameId+'.json');if(point==='prepared'&&String(to).includes('pending-operations')&&String(to).endsWith('.json')){const op=JSON.parse(await fs.readFile(to,'utf8'));match=op.version===2&&op.phase==='applying';}if(match&&!paused){paused=true;process.send?.({paused:true});await new Promise(()=>{});}};await new OperationLog(data).run('profiles:apply',[gameId,plan.token],()=>business.profiles.apply(gameId,plan.token,'backup'));process.send?.({unexpectedCompletion:true});process.exit(2);}
+void main().catch(error=>{process.send?.({error:error.message});process.exit(1);});

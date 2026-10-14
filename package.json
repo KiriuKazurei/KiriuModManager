@@ -1,6 +1,6 @@
 {
   "name": "kiriu-mods-manager",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "description": "本地双游戏 Mod 管理器",
   "main": "dist/main/index.js",
@@ -29,7 +29,9 @@
     "smoke:gallery": "node scripts/smoke-gallery.mjs",
     "smoke:gallery:packaged": "node scripts/smoke-gallery.mjs --packaged",
     "api:inventory": "node scripts/api-inventory.mjs --write",
-    "api:check": "node scripts/api-inventory.mjs"
+    "api:check": "node scripts/api-inventory.mjs",
+    "smoke:v004": "node scripts/smoke-v004.mjs",
+    "smoke:second-batch": "node scripts/smoke-second-batch.mjs"
   },
   "dependencies": {
     "7zip-bin-full": "^26.4.1",

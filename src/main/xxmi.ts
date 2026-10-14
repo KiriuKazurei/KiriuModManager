@@ -1,3 +1,5 @@
+import {fileBytes} from './inspection-files';
+import {assertNoLinks} from './archive';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { GAMES, GameId, Inspection } from '../shared/contracts';
@@ -5,7 +7,7 @@ type ObjectValue = Record<string, unknown>;
 const object = (value: unknown): ObjectValue => value && typeof value === 'object' && !Array.isArray(value) ? value as ObjectValue : {};
 const string = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
 async function exists(target: string, directory = false) {
-  try { const stat = await fs.stat(target); return directory ? stat.isDirectory() : stat.isFile(); }
+  try { await assertNoLinks(target);const stat = await fs.stat(target); return directory ? stat.isDirectory() : stat.isFile(); }
   catch (error) { if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) return false; throw error; }
 }
 export function resolveLoaderPath(base: string, value: string): string {
@@ -34,7 +36,7 @@ export async function inspectXXMI(gameId: GameId, rootInput: string): Promise<In
   const launcherPath = path.join(root, 'Resources', 'Bin', 'XXMI Launcher.exe');
   const warnings: string[] = [];
   let config: ObjectValue = {};
-  try { config = object(JSON.parse(await fs.readFile(path.join(root, 'XXMI Launcher Config.json'), 'utf8'))); }
+  try { config = object(JSON.parse((await fileBytes(path.join(root, 'XXMI Launcher Config.json'))).toString('utf8'))); }
   catch (error) {
     warnings.push((error as NodeJS.ErrnoException).code === 'ENOENT' ? '未找到 Launcher 配置，将按默认 importer 目录检查。' : 'Launcher 配置无法读取或格式无效；仅检查默认目录，未导入游戏路径。');
   }
@@ -47,7 +49,7 @@ export async function inspectXXMI(gameId: GameId, rootInput: string): Promise<In
   let iniExists = false;
   if (importerExists) {
     try {
-      const contents = await fs.readFile(iniPath, 'utf8'); iniExists = true;
+      const contents = (await fileBytes(iniPath,4*1024**2)).toString('utf8'); iniExists = true;
       modsDirectories = [...new Set(parseRecursiveIncludes(contents).map(value => resolveLoaderPath(importerDirectory, value)))];
       if (!modsDirectories.length) warnings.push('d3dx.ini 没有可识别的 [Include] include_recursive 路径；不能确认实际 Mod 目录。');
     } catch { warnings.push('无法读取 importer 的 d3dx.ini；不能确认实际 Mod 目录。'); }

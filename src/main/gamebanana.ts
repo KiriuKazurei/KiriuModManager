@@ -68,6 +68,9 @@ export function bindGameBananaFile(input:unknown,modId:number,urls:string[],file
  return {gameId,remote,version:text(value._sVersion,120),size:file._nFilesize,metadata};
 }
 export async function resolveGameBananaFile(fetcher:typeof fetch,modId:number,urls:string[],filename:string,signal?:AbortSignal,gameId:GameId='zzz'):Promise<GameBananaDownload> {
+ return bindGameBananaFile(await readGameBananaMod(fetcher,modId,signal),modId,urls,filename,gameId);
+}
+export async function readGameBananaMod(fetcher:typeof fetch,modId:number,signal?:AbortSignal):Promise<Record<string,any>> {
  if(!Number.isSafeInteger(modId)||modId<=0)throw new Error('请先打开具体 Mod 页面，再点击该页面的下载。');
  const properties='_idRow,_sName,_aGame,_aSubmitter,_aCredits,_sVersion,_aFiles,_sDescription,_sText,_aCategory,_aRootCategory';
  const timeout=AbortSignal.timeout(30000);
@@ -76,7 +79,7 @@ export async function resolveGameBananaFile(fetcher:typeof fetch,modId:number,ur
  const size=Number(response.headers.get('content-length')||0);if(size>4*1024**2)throw new Error('Mod 信息响应过大。');
  const reader=response.body?.getReader();if(!reader)throw new Error('Mod 信息响应为空。');const chunks:Uint8Array[]=[];let bytes=0;
  try{while(true){const part=await reader.read();if(part.done)break;bytes+=part.value.byteLength;if(bytes>4*1024**2)throw new Error('Mod 信息响应过大。');chunks.push(part.value);}}finally{await reader.cancel().catch(()=>{});}
- return bindGameBananaFile(JSON.parse(Buffer.concat(chunks).toString('utf8')),modId,urls,filename,gameId);
+ return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 export async function verifyModDownload(file:string,binding:GameBananaDownload):Promise<void> {
  await assertNoLinks(file);

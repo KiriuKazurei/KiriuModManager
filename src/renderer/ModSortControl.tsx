@@ -1,0 +1,12 @@
+import {useEffect,useState} from 'react';
+import type {GameId} from '../shared/contracts';
+import {DEFAULT_SORT,readSort,SORT_FIELDS,SortCriterion,SortField} from '../shared/mod-sort';
+const labels:Record<SortField,string>={name:'名称',importedAt:'导入时间',state:'目录状态',favorite:'收藏',character:'角色',category:'分类'};
+export function useModSort(game:GameId){
+ const load=()=>{try{const saved=JSON.parse(localStorage.getItem(`kmm:display:${game}`)||'null');return saved?.version===1?readSort(saved.sort):DEFAULT_SORT;}catch{return DEFAULT_SORT;}};
+ const [value,setValue]=useState(load);useEffect(()=>setValue(load()),[game]);
+ const save=(next:SortCriterion[])=>{setValue(next);try{localStorage.setItem(`kmm:display:${game}`,JSON.stringify({version:1,sort:next}));}catch{/* Display preferences may be unavailable. */}};return [value,save] as const;
+}
+export function ModSortControl({value,onChange}:{value:SortCriterion[];onChange:(value:SortCriterion[])=>void}){
+ return <details className="sort-control"><summary>排序 · {value.map(item=>labels[item.field]+(item.direction==='asc'?' ↑':' ↓')).join(' / ')}</summary><p className="hint">只调整显示顺序。最多三个条件，空值始终在末尾。</p>{value.map((item,index)=><div className="sort-row" key={item.field}><label>第 {index+1} 条件<select aria-label={`排序字段 ${index+1}`} value={item.field} onChange={e=>onChange(value.map((v,i)=>i===index?{...v,field:e.target.value as SortField}:v))}>{SORT_FIELDS.filter(field=>field===item.field||!value.some(v=>v.field===field)).map(field=><option key={field} value={field}>{labels[field]}</option>)}</select></label><select aria-label={`排序方向 ${index+1}`} value={item.direction} onChange={e=>onChange(value.map((v,i)=>i===index?{...v,direction:e.target.value as 'asc'|'desc'}:v))}><option value="asc">升序</option><option value="desc">降序</option></select><button aria-label={`提高排序优先级 ${index+1}`} disabled={!index} onClick={()=>{const next=[...value];[next[index-1],next[index]]=[next[index],next[index-1]];onChange(next);}}>↑</button><button aria-label={`降低排序优先级 ${index+1}`} disabled={index===value.length-1} onClick={()=>{const next=[...value];[next[index+1],next[index]]=[next[index],next[index+1]];onChange(next);}}>↓</button><button aria-label={`移除排序条件 ${index+1}`} disabled={value.length===1} onClick={()=>onChange(value.filter((_,i)=>i!==index))}>移除</button></div>)}<button disabled={value.length===3} onClick={()=>onChange([...value,{field:SORT_FIELDS.find(field=>!value.some(v=>v.field===field))!,direction:'asc'}])}>添加排序条件</button><button onClick={()=>onChange(DEFAULT_SORT)}>恢复名称升序</button></details>;
+}

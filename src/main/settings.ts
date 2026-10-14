@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { Settings, GamePaths, GAMES, GameId, DesktopPreferences } from '../shared/contracts';
 import { validateWebUrl, validateUpdateSource } from './web-links';
+import {writeAtomicJson} from './atomic-json';
 export function defaultSettings(): Settings {
   const empty = (): GamePaths => ({ xxmiRoot: '', gameDirectory: '', modsDirectory: '' });
   return { version: 1, selectedGame: 'zzz', games: { zzz: empty(), endfield: empty() } };
@@ -56,9 +57,7 @@ export class SettingsStore {
     const settings = validateSettings(input);
     const task = this.pending.then(async () => {
       await fs.mkdir(path.dirname(this.file), { recursive: true });
-      const temporary = this.file + '.tmp';
-      await fs.writeFile(temporary, JSON.stringify(settings, null, 2), 'utf8');
-      await fs.rename(temporary, this.file);
+      await writeAtomicJson(this.file,JSON.stringify(settings,null,2));
       return settings;
     });
     this.pending = task.catch(() => {});
