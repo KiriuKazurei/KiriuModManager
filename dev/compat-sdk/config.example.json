@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "machineProfile": "windows-local-reference-machine",
+  "games": {
+    "endfield": {"gameRoot": "E:\\YOUR_GAMES\\Endfield Game", "xxmiRoot": "K:\\YOUR_SDK_XXMI", "channel": "local-unknown"}
+  },
+  "stableDelayMs": 2000,
+  "pollMs": 60000
+}

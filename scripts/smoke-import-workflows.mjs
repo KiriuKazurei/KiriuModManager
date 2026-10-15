@@ -26,7 +26,7 @@ async function shot(name){const cdp=await page.context().newCDPSession(page);try
 async function launch(){app=await electron.launch({args:['.'],cwd:process.cwd(),env});page=await app.firstWindow();page.setDefaultTimeout(45000);page.on('pageerror',e=>errors.push(e.message));await page.locator('.sidebar').waitFor();await app.evaluate(({dialog})=>{globalThis.__importOpen='';globalThis.__importChoices=[];globalThis.__importDialogs=[];dialog.showOpenDialog=async()=>({canceled:!globalThis.__importOpen,filePaths:globalThis.__importOpen?(Array.isArray(globalThis.__importOpen)?globalThis.__importOpen:[globalThis.__importOpen]):[]});dialog.showMessageBox=async(_window,options)=>{globalThis.__importDialogs.push(options);return {response:globalThis.__importChoices.shift()??1,checkboxChecked:false};};});}
 const persisted={};
 try{
- await launch();assert.equal(value(await request('desktopStatus')).version,'0.0.4');
+ await launch();assert.equal(value(await request('desktopStatus')).version,JSON.parse(await fs.readFile('package.json','utf8')).version);
  for(const game of ['zzz','endfield']){
   await page.getByLabel('当前游戏',{exact:true}).selectOption(game);await nav('Mod 库');if(await page.getByRole('button',{name:/^全部 Mod/}).count())await page.getByRole('button',{name:/^全部 Mod/}).click();await page.getByLabel('搜索 Mod',{exact:true}).waitFor();await until(async()=>!await page.getByLabel('当前游戏',{exact:true}).isDisabled());
   await page.locator('.mod-row').filter({hasText:'Original'}).click();await page.getByLabel('作者',{exact:true}).fill('未保存的导入旁草稿');

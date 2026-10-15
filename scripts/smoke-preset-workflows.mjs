@@ -16,7 +16,7 @@ async function select(name){await page.locator('.tool-row').filter({hasText:name
 const importer=()=>page.getByRole('region',{name:'导入预设清单',exact:true}),exporter=()=>page.getByRole('region',{name:'导出预设清单',exact:true}),preview=()=>page.getByRole('region',{name:'预设应用预览',exact:true});
 let lastImportToken='';async function matched(){await until(async()=>{const token=await importer().locator('.manifest-import-preview').getAttribute('data-preview-token').catch(()=>null);return !!token&&token!==lastImportToken&&await importer().getByRole('button',{name:'重新核对匹配',exact:true}).isEnabled().catch(()=>false)&&!(await importer().getByRole('button',{name:'取消读取',exact:true}).count());});lastImportToken=await importer().locator('.manifest-import-preview').getAttribute('data-preview-token');}
 try{
- await launch();assert.equal(value(await request('desktopStatus')).version,'0.0.4');
+ await launch();assert.equal(value(await request('desktopStatus')).version,JSON.parse(await fs.readFile('package.json','utf8')).version);
  for(const game of ['zzz','endfield']){
   await page.getByLabel('当前游戏',{exact:true}).selectOption(game);await until(async()=>!await page.getByLabel('当前游戏',{exact:true}).isDisabled());
   let library=value(await request('scanMods',game));const alpha=library.mods.find(m=>m.name==='Alpha'),beta=library.mods.find(m=>m.name==='Beta'),other=library.mods.find(m=>m.name==='Other');

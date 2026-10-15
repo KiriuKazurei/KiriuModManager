@@ -14,7 +14,7 @@ async function shot(name){const cdp=await page.context().newCDPSession(page);try
 async function launch(){app=await electron.launch({args:['.'],cwd:process.cwd(),env});page=await app.firstWindow();page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));await page.locator('.sidebar').waitFor();await app.evaluate(({dialog})=>{globalThis.__environmentDirectory='';globalThis.__environmentChoices=[];globalThis.__environmentDialogs=[];dialog.showOpenDialog=async()=>({canceled:!globalThis.__environmentDirectory,filePaths:globalThis.__environmentDirectory?[globalThis.__environmentDirectory]:[]});dialog.showMessageBox=async(_window,options)=>{globalThis.__environmentDialogs.push(options);return {response:globalThis.__environmentChoices.shift()??1,checkboxChecked:false};};});}
 async function openSettings(){await page.locator('.sidebar').getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:'常规设置',exact:true}).click();await panel().scrollIntoViewIfNeeded();await ready();}
 const receipts={};try{
- await launch();assert.equal(value(await request('desktopStatus')).version,'0.0.4');
+ await launch();assert.equal(value(await request('desktopStatus')).version,JSON.parse(await fs.readFile('package.json','utf8')).version);
  for(const game of ['zzz','endfield']){
   const f=fixtures[game];await page.getByLabel('当前游戏',{exact:true}).selectOption(game);await openSettings();
   const draft=f.mods+'-未保存草稿';await page.locator('#modsDirectory').fill(draft);await panel().scrollIntoViewIfNeeded();
