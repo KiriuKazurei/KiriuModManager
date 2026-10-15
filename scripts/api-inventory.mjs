@@ -86,7 +86,10 @@ export async function deriveInventory(){
   const config=ts.readConfigFile(path.join(root,'tsconfig.json'),ts.sys.readFile);assert.ok(!config.error);
   const parsed=ts.parseJsonConfigFileContent(config.config,ts.sys,root);
   const files=[...parsed.fileNames,...['src/main/index.ts','src/preload/index.ts'].map(file=>path.join(root,file))];
-  const program=ts.createProgram(files,{...parsed.options,noEmit:true});const checker=program.getTypeChecker();
+  // Git on Windows may check out CRLF; AST text and JSON inventory use canonical LF.
+  const options={...parsed.options,noEmit:true},host=ts.createCompilerHost(options),read=host.readFile;
+  host.readFile=file=>read(file)?.replaceAll('\r\n','\n');
+  const program=ts.createProgram(files,options,host);const checker=program.getTypeChecker();
   const relevant=program.getSourceFiles().filter(sf=>['src/main/','src/preload/','src/shared/'].some(prefix=>relative(sf.fileName).startsWith(prefix)));
   const diagnostics=[...program.getOptionsDiagnostics(),...relevant.flatMap(sf=>[...program.getSyntacticDiagnostics(sf),...program.getSemanticDiagnostics(sf)])];
   assert.equal(diagnostics.length,0,ts.formatDiagnosticsWithColorAndContext(diagnostics,{getCanonicalFileName:file=>file,getCurrentDirectory:()=>root,getNewLine:()=> '\n'}));
@@ -125,5 +128,5 @@ export async function deriveInventory(){
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   const inventory=await deriveInventory();const output=path.join(root,'docs/desktop-api-inventory.json');const json=JSON.stringify(inventory,null,2)+'\n';
   if(process.argv.includes('--write')){await fs.writeFile(output,json);console.log('Generated '+relative(output)+' ('+inventory.counts.asynchronousMethods+' async + 1 event)');}
-  else{assert.equal(await fs.readFile(output,'utf8'),json,'Inventory differs from current AST; run npm.cmd run api:inventory and review');console.log('API AST check PASS: '+inventory.counts.asynchronousMethods+' async + 1 event; mapping/preload/handlers/consumer inventory matches');}
+  else{assert.equal((await fs.readFile(output,'utf8')).replaceAll('\r\n','\n'),json,'Inventory differs from current AST; run npm.cmd run api:inventory and review');console.log('API AST check PASS: '+inventory.counts.asynchronousMethods+' async + 1 event; mapping/preload/handlers/consumer inventory matches');}
 }

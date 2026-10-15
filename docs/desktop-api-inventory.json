@@ -585,7 +585,7 @@
         "file": "src/main/index.ts",
         "line": 184
       },
-      "serviceEntry": "async theme=>{\r\n    if(theme!=='day'&&theme!=='night')throw new Error('窗口主题无效。');\r\n    const color=theme==='day'?'#e4e8f0':'#1a1e27';const symbolColor=theme==='day'?'#16181e':'#f4f1ea';\r\n    if(window&&!window.isDestroyed()){window.setBackgroundColor(color);if(process.platform!=='darwin')window.setTitleBarOverlay({color,symbolColor,height:32});}\r\n  }",
+      "serviceEntry": "async theme=>{\n    if(theme!=='day'&&theme!=='night')throw new Error('窗口主题无效。');\n    const color=theme==='day'?'#e4e8f0':'#1a1e27';const symbolColor=theme==='day'?'#16181e':'#f4f1ea';\n    if(window&&!window.isDestroyed()){window.setBackgroundColor(color);if(process.platform!=='darwin')window.setTitleBarOverlay({color,symbolColor,height:32});}\n  }",
       "serviceCalls": [
         "window.isDestroyed",
         "window.setBackgroundColor",
@@ -629,7 +629,7 @@
         "file": "src/main/index.ts",
         "line": 167
       },
-      "serviceEntry": "async(id,format,options)=>{\r\n    const job=await inspections.jobs.read(id,true);inspections.diagnostics.preview(job,options);\r\n    const choice=await dialog.showSaveDialog(window!,{title:'导出脱敏本地诊断报告',defaultPath:`Kiriu-${job.gameId}-diagnostics.${format==='json'?'json':'md'}`,filters:[{name:format==='json'?'JSON':'Markdown',extensions:[format==='json'?'json':'md']}],properties:['showOverwriteConfirmation']});\r\n    if(choice.canceled||!choice.filePath)return null;const current=await store.read();const forbidden=Object.values(current.games).flatMap(p=>Object.values(p)).filter(Boolean);if(forbidden.some(root=>{const relative=path.relative(path.resolve(root),path.resolve(choice.filePath!));return !relative||!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative);}))throw new Error('报告不能写入任一游戏、Mod 或加载器目录。');\r\n    return inspections.diagnostics.save(await inspections.jobs.read(id,true),format,options,choice.filePath);\r\n  }",
+      "serviceEntry": "async(id,format,options)=>{\n    const job=await inspections.jobs.read(id,true);inspections.diagnostics.preview(job,options);\n    const choice=await dialog.showSaveDialog(window!,{title:'导出脱敏本地诊断报告',defaultPath:`Kiriu-${job.gameId}-diagnostics.${format==='json'?'json':'md'}`,filters:[{name:format==='json'?'JSON':'Markdown',extensions:[format==='json'?'json':'md']}],properties:['showOverwriteConfirmation']});\n    if(choice.canceled||!choice.filePath)return null;const current=await store.read();const forbidden=Object.values(current.games).flatMap(p=>Object.values(p)).filter(Boolean);if(forbidden.some(root=>{const relative=path.relative(path.resolve(root),path.resolve(choice.filePath!));return !relative||!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative);}))throw new Error('报告不能写入任一游戏、Mod 或加载器目录。');\n    return inspections.diagnostics.save(await inspections.jobs.read(id,true),format,options,choice.filePath);\n  }",
       "serviceCalls": [
         "inspections.jobs.read",
         "inspections.diagnostics.preview",
@@ -714,7 +714,7 @@
         "file": "src/main/index.ts",
         "line": 292
       },
-      "serviceEntry": "async (current: unknown) => {\r\n    const selected = await dialog.showOpenDialog(window!, { title: '选择目录', defaultPath: typeof current === 'string' && current ? current : undefined, properties: ['openDirectory'] });\r\n    return selected.canceled ? null : selected.filePaths[0] ?? null;\r\n  }",
+      "serviceEntry": "async (current: unknown) => {\n    const selected = await dialog.showOpenDialog(window!, { title: '选择目录', defaultPath: typeof current === 'string' && current ? current : undefined, properties: ['openDirectory'] });\n    return selected.canceled ? null : selected.filePaths[0] ?? null;\n  }",
       "serviceCalls": [
         "dialog.showOpenDialog"
       ],
@@ -1615,7 +1615,7 @@
         "file": "src/main/index.ts",
         "line": 130
       },
-      "serviceEntry": "async(game,source)=>{\r\n    if(!source||!['folder','archive','download'].includes(source.kind))throw new Error('导入来源类型无效。');\r\n    if(source.kind==='download'){const input=browser().importSource(source.taskId);if(input.gameId!==game)throw new Error('下载任务与所选游戏不匹配。');return inspections.jobs.start('mod-import',game,(await store.read()).games[game],async(signal,progress)=>{try{return await mods.imports.prepareDownload(game,input,signal,progress);}catch(error){if(!signal.aborted)await browser().failImport(source.taskId,(error as Error).message).catch(()=>{});throw error;}},undefined,JSON.stringify(source));}\r\n    const choice=await selectSource(source.kind,true);if(choice.canceled||!choice.filePaths.length)return null;\r\n    return inspections.jobs.start('mod-import',game,(await store.read()).games[game],(signal,progress)=>mods.imports.prepareLocal(game,choice.filePaths,signal,progress),undefined,JSON.stringify(choice.filePaths));\r\n  }",
+      "serviceEntry": "async(game,source)=>{\n    if(!source||!['folder','archive','download'].includes(source.kind))throw new Error('导入来源类型无效。');\n    if(source.kind==='download'){const input=browser().importSource(source.taskId);if(input.gameId!==game)throw new Error('下载任务与所选游戏不匹配。');return inspections.jobs.start('mod-import',game,(await store.read()).games[game],async(signal,progress)=>{try{return await mods.imports.prepareDownload(game,input,signal,progress);}catch(error){if(!signal.aborted)await browser().failImport(source.taskId,(error as Error).message).catch(()=>{});throw error;}},undefined,JSON.stringify(source));}\n    const choice=await selectSource(source.kind,true);if(choice.canceled||!choice.filePaths.length)return null;\n    return inspections.jobs.start('mod-import',game,(await store.read()).games[game],(signal,progress)=>mods.imports.prepareLocal(game,choice.filePaths,signal,progress),undefined,JSON.stringify(choice.filePaths));\n  }",
       "serviceCalls": [
         "['folder','archive','download'].includes",
         "browser().importSource",
@@ -1764,7 +1764,7 @@
         "file": "src/main/index.ts",
         "line": 269
       },
-      "serviceEntry": "async (game:GameId,id:string) => {\r\n    const source=await dialog.showOpenDialog(window!,{title:'选择 Mod 预览图',properties:['openFile'],filters:[{name:'本地图片',extensions:['png','jpg','jpeg','webp','gif']}]});\r\n    return source.canceled?null:mods.setCover(game,id,source.filePaths[0]);\r\n  }",
+      "serviceEntry": "async (game:GameId,id:string) => {\n    const source=await dialog.showOpenDialog(window!,{title:'选择 Mod 预览图',properties:['openFile'],filters:[{name:'本地图片',extensions:['png','jpg','jpeg','webp','gif']}]});\n    return source.canceled?null:mods.setCover(game,id,source.filePaths[0]);\n  }",
       "serviceCalls": [
         "dialog.showOpenDialog",
         "mods.setCover"
@@ -1845,7 +1845,7 @@
         "file": "src/main/index.ts",
         "line": 264
       },
-      "serviceEntry": "async (game,id,confirmation) => {\r\n    const snapshot=await mods.scan(game); const target=snapshot.mods.find(mod=>mod.id===id); if(!target) throw new Error('Mod 不存在，请重新扫描。');\r\n    const choice=await dialog.showMessageBox(window!,{type:'warning',title:'移到恢复区',message:`移除“${target.name}”？`,detail:'文件会从 loader 读取目录移除，恢复副本保存在管理器数据目录的 removed 文件夹。不会静默永久删除。',buttons:['取消','移到恢复区'],defaultId:0,cancelId:0});\r\n    return choice.response===1?mods.delete(game,id,confirmation):null;\r\n  }",
+      "serviceEntry": "async (game,id,confirmation) => {\n    const snapshot=await mods.scan(game); const target=snapshot.mods.find(mod=>mod.id===id); if(!target) throw new Error('Mod 不存在，请重新扫描。');\n    const choice=await dialog.showMessageBox(window!,{type:'warning',title:'移到恢复区',message:`移除“${target.name}”？`,detail:'文件会从 loader 读取目录移除，恢复副本保存在管理器数据目录的 removed 文件夹。不会静默永久删除。',buttons:['取消','移到恢复区'],defaultId:0,cancelId:0});\n    return choice.response===1?mods.delete(game,id,confirmation):null;\n  }",
       "serviceCalls": [
         "mods.scan",
         "snapshot.mods.find",
@@ -2062,7 +2062,7 @@
         "file": "src/main/index.ts",
         "line": 258
       },
-      "serviceEntry": "async (game: GameId,kind: 'folder'|'archive') => {\r\n    const source=await selectSource(kind,true); if(source.canceled) return {library:await mods.scan(game),importedIds:[],errors:[],canceled:true}; return legacyImport(game,source.filePaths);\r\n  }",
+      "serviceEntry": "async (game: GameId,kind: 'folder'|'archive') => {\n    const source=await selectSource(kind,true); if(source.canceled) return {library:await mods.scan(game),importedIds:[],errors:[],canceled:true}; return legacyImport(game,source.filePaths);\n  }",
       "serviceCalls": [
         "mods.scan"
       ],
@@ -2230,7 +2230,7 @@
         "file": "src/main/index.ts",
         "line": 261
       },
-      "serviceEntry": "async (game,id,kind,confirmation) => {\r\n    const source=await selectSource(kind,false); return source.canceled?null:mods.replace(game,id,source.filePaths[0],confirmation);\r\n  }",
+      "serviceEntry": "async (game,id,kind,confirmation) => {\n    const source=await selectSource(kind,false); return source.canceled?null:mods.replace(game,id,source.filePaths[0],confirmation);\n  }",
       "serviceCalls": [
         "mods.replace"
       ],
@@ -2538,7 +2538,7 @@
         "file": "src/main/index.ts",
         "line": 150
       },
-      "serviceEntry": "async(game,draftId)=>{\r\n    let file:string|undefined;if(!draftId){const choice=await dialog.showOpenDialog(window!,{title:'导入预设清单',properties:['openFile'],filters:[{name:'Kiriu 预设清单／配置',extensions:['json','zip']}]});if(choice.canceled||!choice.filePaths[0])return null;file=choice.filePaths[0];}\r\n    return inspections.jobs.start('preset-import',game,(await store.read()).games[game],(signal,progress)=>presetManifests.prepareImport(game,file,draftId,signal,progress),undefined,JSON.stringify([file,draftId]));\r\n  }",
+      "serviceEntry": "async(game,draftId)=>{\n    let file:string|undefined;if(!draftId){const choice=await dialog.showOpenDialog(window!,{title:'导入预设清单',properties:['openFile'],filters:[{name:'Kiriu 预设清单／配置',extensions:['json','zip']}]});if(choice.canceled||!choice.filePaths[0])return null;file=choice.filePaths[0];}\n    return inspections.jobs.start('preset-import',game,(await store.read()).games[game],(signal,progress)=>presetManifests.prepareImport(game,file,draftId,signal,progress),undefined,JSON.stringify([file,draftId]));\n  }",
       "serviceCalls": [
         "dialog.showOpenDialog",
         "inspections.jobs.start",
@@ -2588,7 +2588,7 @@
         "file": "src/main/index.ts",
         "line": 156
       },
-      "serviceEntry": "async(game,id,kind)=>{\r\n    await presetManifests.session(game,id);if(!['folder','archive'].includes(kind))throw new Error('替代来源类型无效。');const choice=await dialog.showOpenDialog(window!,{title:'导入本地替代 Mod（默认停用）',properties:[kind==='folder'?'openDirectory':'openFile'],...(kind==='archive'?{filters:[{name:'Mod 压缩包',extensions:['zip','7z','rar']}]}:{})});\r\n    if(choice.canceled||!choice.filePaths.length)return {library:await mods.scan(game),importedIds:[],errors:[],canceled:true};await presetManifests.session(game,id);\r\n    const settings=await store.read(),protectedRoots=[app.getPath('userData'),...Object.values(settings.games).map(paths=>paths.modsDirectory).filter(Boolean)];if(choice.filePaths.some(source=>protectedRoots.some(root=>isInside(root,source)||isInside(source,root))))throw new Error('替代来源不能与数据目录或任一游戏 Mod 库重叠。');return legacyImport(game,choice.filePaths);\r\n  }",
+      "serviceEntry": "async(game,id,kind)=>{\n    await presetManifests.session(game,id);if(!['folder','archive'].includes(kind))throw new Error('替代来源类型无效。');const choice=await dialog.showOpenDialog(window!,{title:'导入本地替代 Mod（默认停用）',properties:[kind==='folder'?'openDirectory':'openFile'],...(kind==='archive'?{filters:[{name:'Mod 压缩包',extensions:['zip','7z','rar']}]}:{})});\n    if(choice.canceled||!choice.filePaths.length)return {library:await mods.scan(game),importedIds:[],errors:[],canceled:true};await presetManifests.session(game,id);\n    const settings=await store.read(),protectedRoots=[app.getPath('userData'),...Object.values(settings.games).map(paths=>paths.modsDirectory).filter(Boolean)];if(choice.filePaths.some(source=>protectedRoots.some(root=>isInside(root,source)||isInside(source,root))))throw new Error('替代来源不能与数据目录或任一游戏 Mod 库重叠。');return legacyImport(game,choice.filePaths);\n  }",
       "serviceCalls": [
         "presetManifests.session",
         "['folder','archive'].includes",
@@ -3924,7 +3924,7 @@
         "file": "src/main/index.ts",
         "line": 196
       },
-      "serviceEntry": "async()=>{\r\n    const source=await updateSource();return updater.download(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'question',title:'下载管理器更新',message:`下载 ${release.version}？`,detail:`更新来源：${source}\\n大小：${(release.size/1024**2).toFixed(1)} MiB\\n\\n${release.notes}`,buttons:['取消','下载更新'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});\r\n  }",
+      "serviceEntry": "async()=>{\n    const source=await updateSource();return updater.download(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'question',title:'下载管理器更新',message:`下载 ${release.version}？`,detail:`更新来源：${source}\\n大小：${(release.size/1024**2).toFixed(1)} MiB\\n\\n${release.notes}`,buttons:['取消','下载更新'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});\n  }",
       "serviceCalls": [
         "updater.download",
         "dialog.showMessageBox",
@@ -3955,7 +3955,7 @@
         "file": "src/main/index.ts",
         "line": 199
       },
-      "serviceEntry": "async()=>{\r\n    for(const game of Object.keys(GAMES)as GameId[])await environment.assertReady(game,true);\r\n    if(environment.hasActive())throw new Error('请先等待环境修复完成，再安装管理器更新。');\r\n    if(mods.imports.hasActive())throw new Error('请先等待导入准备／提交完成或取消，再安装管理器更新。');\r\n    if(inspections.storage.hasActive())throw new Error('请先等待恢复区清理完成或取消，再安装管理器更新。');\r\n    if(modBrowser?.hasActiveDownloads())throw new Error('请先等待 Mod 下载和安装完成，或取消下载，再安装管理器更新。');\r\n    preparingUpdateInstall=true;\r\n    try {\r\n    const source=await updateSource();const result=await updater.install(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'warning',title:'安装管理器更新',message:`退出并安装 ${release.version}？`,detail:'请先保存所有未提交的编辑。程序将退出、替换完整便携目录并重新打开。用户数据和 Mod 文件保持；旧程序目录保留作回退副本。',buttons:['取消','退出并安装'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});if(result)setTimeout(()=>app.quit(),250);return result;\r\n    }finally{preparingUpdateInstall=false;}\r\n  }",
+      "serviceEntry": "async()=>{\n    for(const game of Object.keys(GAMES)as GameId[])await environment.assertReady(game,true);\n    if(environment.hasActive())throw new Error('请先等待环境修复完成，再安装管理器更新。');\n    if(mods.imports.hasActive())throw new Error('请先等待导入准备／提交完成或取消，再安装管理器更新。');\n    if(inspections.storage.hasActive())throw new Error('请先等待恢复区清理完成或取消，再安装管理器更新。');\n    if(modBrowser?.hasActiveDownloads())throw new Error('请先等待 Mod 下载和安装完成，或取消下载，再安装管理器更新。');\n    preparingUpdateInstall=true;\n    try {\n    const source=await updateSource();const result=await updater.install(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'warning',title:'安装管理器更新',message:`退出并安装 ${release.version}？`,detail:'请先保存所有未提交的编辑。程序将退出、替换完整便携目录并重新打开。用户数据和 Mod 文件保持；旧程序目录保留作回退副本。',buttons:['取消','退出并安装'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});if(result)setTimeout(()=>app.quit(),250);return result;\n    }finally{preparingUpdateInstall=false;}\n  }",
       "serviceCalls": [
         "Object.keys",
         "environment.assertReady",
@@ -4026,7 +4026,7 @@
         "file": "src/main/index.ts",
         "line": 277
       },
-      "serviceEntry": "async input => {\r\n    await environment.assertReady(validateSettings(input).selectedGame,true);\r\n    const settings = await gameConfiguration(input); const gameId = settings.selectedGame;\r\n    const fields = settings.games[gameId];\r\n    if (!fields.modsDirectory && fields.xxmiRoot) fields.modsDirectory = path.join(fields.xxmiRoot, GAMES[gameId].importer, 'Mods');\r\n    const result = await deployment.deploy(gameId, fields);\r\n    try { return { ...result, settings: await store.save(settings) }; }\r\n    catch { throw new Error('XXMI 文件与路径已部署，但管理器配置保存失败。请检查数据目录权限并手动保存路径。'); }\r\n  }",
+      "serviceEntry": "async input => {\n    await environment.assertReady(validateSettings(input).selectedGame,true);\n    const settings = await gameConfiguration(input); const gameId = settings.selectedGame;\n    const fields = settings.games[gameId];\n    if (!fields.modsDirectory && fields.xxmiRoot) fields.modsDirectory = path.join(fields.xxmiRoot, GAMES[gameId].importer, 'Mods');\n    const result = await deployment.deploy(gameId, fields);\n    try { return { ...result, settings: await store.save(settings) }; }\n    catch { throw new Error('XXMI 文件与路径已部署，但管理器配置保存失败。请检查数据目录权限并手动保存路径。'); }\n  }",
       "serviceCalls": [
         "environment.assertReady",
         "path.join",
@@ -4099,7 +4099,7 @@
         "file": "src/main/index.ts",
         "line": 286
       },
-      "serviceEntry": "async input => {\r\n    await environment.assertReady(validateSettings(input).selectedGame,true);\r\n    const settings = await gameConfiguration(input); const result = await syncXXMIPaths(settings.selectedGame, settings.games[settings.selectedGame]);\r\n    try { return { ...result, settings: await store.save(settings) }; }\r\n    catch { throw new Error('XXMI 路径已同步，但管理器配置保存失败。原外部配置备份仍在，请检查数据目录权限后保存。'); }\r\n  }",
+      "serviceEntry": "async input => {\n    await environment.assertReady(validateSettings(input).selectedGame,true);\n    const settings = await gameConfiguration(input); const result = await syncXXMIPaths(settings.selectedGame, settings.games[settings.selectedGame]);\n    try { return { ...result, settings: await store.save(settings) }; }\n    catch { throw new Error('XXMI 路径已同步，但管理器配置保存失败。原外部配置备份仍在，请检查数据目录权限后保存。'); }\n  }",
       "serviceCalls": [
         "environment.assertReady",
         "store.save"
