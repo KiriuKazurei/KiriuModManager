@@ -1,5 +1,6 @@
 import { promises as fs, createWriteStream } from 'node:fs';
 import path from 'node:path';
+import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import * as yauzl from 'yauzl';
 
@@ -19,18 +20,23 @@ export async function assertNoLinks(target: string): Promise<void> {
     const parent = path.dirname(current); if (parent === current) return; current = parent;
   }
 }
-export async function extractZip(archive: string, destination: string): Promise<number> {
+export async function extractZip(archive: string, destination: string, signal?:AbortSignal): Promise<number> {
+  signal?.throwIfAborted();
   await assertNoLinks(destination);
   await fs.mkdir(destination, { recursive: true });
   const zip = await new Promise<yauzl.ZipFile>((resolve, reject) => yauzl.open(archive, { lazyEntries: true, autoClose: true, validateEntrySizes: true }, (error, file) => error ? reject(error) : resolve(file!)));
   let files = 0; let total = 0; const seen = new Set<string>();
   return new Promise((resolve, reject) => {
-    let failed = false;
-    const fail = (error: Error) => { if (!failed) { failed = true; zip.close(); reject(error); } };
+    let failed = false;let actual=0;
+    const abort=()=>fail(new Error('解包已取消。'));
+    signal?.addEventListener('abort',abort,{once:true});
+    const detach=()=>signal?.removeEventListener('abort',abort);
+    const fail = (error: Error) => { if (!failed) { failed = true; detach(); zip.close(); reject(error); } };
     zip.on('error', fail);
-    zip.on('end', () => { if (!failed) resolve(files); });
+    zip.on('end', () => { if (!failed) {detach();resolve(files);} });
     zip.on('entry', (entry: yauzl.Entry) => {
       void (async () => {
+        signal?.throwIfAborted();
         const mode = (entry.externalFileAttributes >>> 16) & 0xf000;
         if (mode === 0xa000 || (mode && mode !== 0x8000 && mode !== 0x4000)) throw new Error('压缩包包含链接或特殊文件，已停止解包。');
         const target = containedPath(destination, entry.fileName);
@@ -43,7 +49,7 @@ export async function extractZip(archive: string, destination: string): Promise<
         else {
           await fs.mkdir(path.dirname(target), { recursive: true });
           const stream = await new Promise<NodeJS.ReadableStream>((res, rej) => zip.openReadStream(entry, (error, input) => error ? rej(error) : res(input!)));
-          await pipeline(stream, createWriteStream(target, { flags: 'wx' }));
+          await pipeline(stream, new Transform({transform(chunk,encoding,done){actual+=chunk.length;done(actual>2*1024**3?new Error('实际解包输出超过 2 GiB。'):null,chunk);}}), createWriteStream(target, { flags: 'wx' }), {signal});
         }
         if (!failed) zip.readEntry();
       })().catch(fail);

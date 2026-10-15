@@ -1,3 +1,4 @@
+import {ModImportPanel} from './ModImportPanel';
 import {useEffect,useState} from 'react';
 import type {GameId,ModBrowserStatus,ModDownload,ModDownloadAction,ModDownloadInstallPlan,ModInstallDestination} from '../shared/contracts';
 import {unwrap} from './ui';
@@ -8,6 +9,7 @@ const active=(task:ModDownload)=>['binding','downloading','verifying','installin
 const waiting=(task:ModDownload)=>['ready','waiting-directory'].includes(task.stage);
 const filters=['全部','下载中','待安装','已下载','已安装','未完成'] as const;
 export function ModDownloadsPage({modsRoots,onLibrary,onBrowse}:{modsRoots:Record<GameId,string>;onLibrary:(game:GameId,id:string)=>void;onBrowse:()=>void}){
+ const [preparing,setPreparing]=useState<{taskId:string;gameId:GameId}|null>(null);
  const [updateEntries,setUpdateEntries]=useState<Record<string,string>>({});
  const [status,setStatus]=useState<ModBrowserStatus|null>(null);const [error,setError]=useState('');const [busyId,setBusyId]=useState('');
  const [filter,setFilter]=useState<typeof filters[number]>('全部');const [plans,setPlans]=useState<Record<string,ModDownloadInstallPlan>>({});
@@ -24,6 +26,7 @@ export function ModDownloadsPage({modsRoots,onLibrary,onBrowse}:{modsRoots:Recor
   <div className="page-heading"><div><h1>下载进度</h1><p className="mod-business-note">管理下载中的任务、已下载资源和历史记录。安装完成后保持停用，请到 Mod 库手动开启。</p></div><button onClick={onBrowse}>获取Mod</button></div>
   <div className="download-summary"><span><strong>{tasks.filter(active).length}</strong> 正在处理</span><span><strong>{tasks.filter(waiting).length}</strong> 等待安装</span><span><strong>{tasks.filter(task=>task.archiveReady).length}</strong> 完整资源</span><span><strong>{tasks.length}</strong> 下载记录</span></div>
   <div className="download-filters" role="group" aria-label="筛选下载记录">{filters.map(item=><button key={item} aria-pressed={filter===item} className={filter===item?'active':''} onClick={()=>setFilter(item)}>{item}</button>)}</div>
+  {preparing&&<ModImportPanel key={preparing.taskId} gameId={preparing.gameId} source={{kind:'download',taskId:preparing.taskId}} onClose={()=>setPreparing(null)} onComplete={()=>{void window.kmm.modBrowserStatus().then(result=>{if(result.ok)setStatus(result.value);});}}/>}
   {(error||status?.error)&&<p className="error" role="alert">{error||status?.error}</p>}
   {!visible.length&&<div className="empty-state"><h2>{tasks.length?'此分类暂无记录':'暂无下载记录'}</h2><p>在获取Mod页面选择 GameBanana 托管的 ZIP、7z 或 RAR 下载。</p></div>}
   <div className="download-list">{visible.map(task=>{
@@ -39,10 +42,10 @@ export function ModDownloadsPage({modsRoots,onLibrary,onBrowse}:{modsRoots:Recor
     <div className="market-task-actions">
      {['binding','downloading','verifying'].includes(task.stage)&&<button disabled={busy} onClick={()=>void action(task.id,'cancel')}>取消下载</button>}
      {ended&&task.archiveReady&&<button disabled={busy} onClick={()=>void action(task.id,'show-file')}>查看压缩包</button>}
-     {installable&&<><button className="primary" disabled={busy} onClick={()=>task.updateTarget&&!currentPlan?void plan(task.id):void action(task.id,'retry-install',currentPlan?.updateTarget?[{entryPath:updateEntries[task.id]??currentPlan.items[0].entryPath,folder:''}]:currentPlan?.items.map(({entryPath,folder})=>({entryPath,folder})))}>{busy?'正在处理…':task.updateTarget?(currentPlan?'确认替换此 Mod':'读取更新包条目'):currentPlan?'安装到选定文件夹':'一键安装'}</button>{!currentPlan&&<button disabled={busy} onClick={()=>void plan(task.id)}>选择安装位置</button>}</>}
+     {installable&&<><button className="primary" disabled={busy} onClick={()=>!task.updateTarget?setPreparing({taskId:task.id,gameId:task.gameId}):task.updateTarget&&!currentPlan?void plan(task.id):void action(task.id,'retry-install',currentPlan?.updateTarget?[{entryPath:updateEntries[task.id]??currentPlan.items[0].entryPath,folder:''}]:currentPlan?.items.map(({entryPath,folder})=>({entryPath,folder})))}>{busy?'正在处理…':task.updateTarget?(currentPlan?'确认替换此 Mod':'读取更新包条目'):'预检安装'}</button>{!currentPlan&&task.updateTarget&&<button disabled={busy} onClick={()=>void plan(task.id)}>选择安装位置</button>}</>}
      {task.stage==='waiting-directory'&&!task.updateTarget&&<button className="primary" disabled={busy} onClick={()=>void action(task.id,'install-current')}>使用当前目录准备安装</button>}
      {ended&&task.stage!=='complete'&&task.stage!=='ready'&&<><button disabled={busy} onClick={()=>void action(task.id,'retry-download')}>重新下载</button><button disabled={busy} onClick={()=>void action(task.id,'retry-binding')}>重读 Mod 信息</button></>}
-     {task.items.some(item=>item.ok)&&<button disabled={busy||task.targetRoot.toLowerCase()!==modsRoots[task.gameId].toLowerCase()} title={task.targetRoot.toLowerCase()!==modsRoots[task.gameId].toLowerCase()?'请在设置中切回此任务的根目录后查看':undefined} onClick={()=>onLibrary(task.gameId,task.items.find(item=>item.ok)!.id!)}>查看已安装 Mod</button>}
+     {task.items.some(item=>item.ok&&item.id)&&<button disabled={busy||task.targetRoot.toLowerCase()!==modsRoots[task.gameId].toLowerCase()} title={task.targetRoot.toLowerCase()!==modsRoots[task.gameId].toLowerCase()?'请在设置中切回此任务的根目录后查看':undefined} onClick={()=>onLibrary(task.gameId,task.items.find(item=>item.ok&&item.id)!.id!)}>查看已安装 Mod</button>}
     </div>
    </article>;
   })}</div>

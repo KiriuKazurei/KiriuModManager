@@ -2,6 +2,19 @@ import type {DesktopAPI,Result} from './contracts';
 
 // Type-only correspondence: sandbox preload must not require this file at runtime.
 export interface IPCContracts {
+  'mod-import:prepare':DesktopAPI['prepareModImport'];
+  'mod-import:revise':DesktopAPI['reviseModImport'];
+  'mod-import:files':DesktopAPI['modImportFiles'];
+  'mod-import:commit':DesktopAPI['commitModImport'];
+  'mod-import:discard':DesktopAPI['discardModImport'];
+  'presets:preview':DesktopAPI['preparePresetApply'];
+  'presets:commit':DesktopAPI['commitPresetApply'];
+  'preset-manifest:prepare-export':DesktopAPI['preparePresetExport'];
+  'preset-manifest:export':DesktopAPI['exportPresetManifest'];
+  'preset-manifest:prepare-import':DesktopAPI['preparePresetManifestImport'];
+  'preset-manifest:revise':DesktopAPI['revisePresetManifestImport'];
+  'preset-manifest:commit':DesktopAPI['commitPresetManifestImport'];
+  'preset-manifest:replacement':DesktopAPI['importPresetReplacement'];
   'inspection:diagnostics':DesktopAPI['startDiagnostics'];
   'inspection:inventory':DesktopAPI['startRecoveryInventory'];
   'inspection:conflicts':DesktopAPI['startConflictInspection'];

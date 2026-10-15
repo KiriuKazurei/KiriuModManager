@@ -3,6 +3,19 @@ import type { DesktopAPI } from '../shared/contracts';
 import type {IPCChannel,IPCArguments,IPCContracts} from '../shared/ipc-contracts';
 const invoke=<C extends IPCChannel>(channel:C,...args:IPCArguments<C>):ReturnType<IPCContracts[C]>=>ipcRenderer.invoke(channel,...args) as ReturnType<IPCContracts[C]>;
 const api: DesktopAPI = {
+  prepareModImport:(game,source)=>invoke('mod-import:prepare',game,source),
+  reviseModImport:(game,id,choices)=>invoke('mod-import:revise',game,id,choices),
+  modImportFiles:(game,id,entry,offset)=>invoke('mod-import:files',game,id,entry,offset),
+  commitModImport:(game,token,accept)=>invoke('mod-import:commit',game,token,accept),
+  discardModImport:(game,id)=>invoke('mod-import:discard',game,id),
+  preparePresetApply:(game,id,choices,excluded)=>invoke('presets:preview',game,id,choices,excluded),
+  commitPresetApply:(game,token,confirmation)=>invoke('presets:commit',game,token,confirmation),
+  preparePresetExport:(game,id,includeProfile)=>invoke('preset-manifest:prepare-export',game,id,includeProfile),
+  exportPresetManifest:(game,token)=>invoke('preset-manifest:export',game,token),
+  preparePresetManifestImport:(game,draftId)=>invoke('preset-manifest:prepare-import',game,draftId),
+  revisePresetManifestImport:(game,id,choices)=>invoke('preset-manifest:revise',game,id,choices),
+  commitPresetManifestImport:(game,token,options)=>invoke('preset-manifest:commit',game,token,options),
+  importPresetReplacement:(game,id,kind)=>invoke('preset-manifest:replacement',game,id,kind),
   startDiagnostics:(game)=>invoke('inspection:diagnostics',game),
   startRecoveryInventory:(game)=>invoke('inspection:inventory',game),
   startConflictInspection:(game)=>invoke('inspection:conflicts',game),

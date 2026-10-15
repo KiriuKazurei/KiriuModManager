@@ -9,12 +9,12 @@ import {logOperationReference} from './operation-log';
 
 type Identity={dev:string;ino:string};
 type Change={kind:'swap';target:string;source?:string;newOnly?:boolean}|{kind:'move';from:string;target:string};
-export type MetadataChange={target:string;bytes:Buffer|string|null;gameSettings?:boolean};
+export type MetadataChange={target:string;bytes:Buffer|string|null;gameSettings?:boolean;expected?:string};
 type Step=Change&{work:string;old?:Identity;incoming?:Identity};
 type Meta={target:string;before:boolean;after:boolean;gameSettings?:boolean};
 export interface ProfileFileChange {target:string;bytes:Buffer;expected:string}
 type ProfileFile={target:string;before:string;after:string};
-interface Operation {version:1|2;purpose?:'profile-switch';files?:ProfileFile[];id:string;gameId:GameId;root:string;name:string;createdAt:string;phase:'preparing'|'applying'|'committed'|'rolled-back';steps:Step[];metadata:Meta[]}
+interface Operation {version:1|2;purpose?:'profile-switch'|'preset-switch'|'preset-import';files?:ProfileFile[];id:string;gameId:GameId;root:string;name:string;createdAt:string;phase:'preparing'|'applying'|'committed'|'rolled-back';steps:Step[];metadata:Meta[]}
 const same=(a:string,b:string)=>path.resolve(a).toLowerCase()===path.resolve(b).toLowerCase();
 const inside=(root:string,file:string)=>{const relative=path.relative(path.resolve(root),path.resolve(file));return !relative||!relative.startsWith('..')&&!path.isAbsolute(relative);};
 const digest=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
@@ -34,12 +34,15 @@ export class FileOperations {
  private async store(op:Operation){await writeAtomicJson(this.recordFile(op.id),JSON.stringify(op));}
  private validate(op:Operation){
   if(![1,2].includes(op.version)||!Object.hasOwn(GAMES,op.gameId)||typeof op.root!=='string'||!path.isAbsolute(op.root)||same(op.root,path.parse(op.root).root)||typeof op.name!=='string'||!['preparing','applying','committed','rolled-back'].includes(op.phase)||!Array.isArray(op.steps)||(op.version===1?(!op.steps.length||op.steps.length>8):op.steps.length>5000)||!Array.isArray(op.metadata)||op.metadata.length>4)throw new Error('中断操作记录无效，原文件保留。');
-  if(op.version===2&&(op.purpose!=='profile-switch'||!Array.isArray(op.files)||op.files.length>2048||op.files.some(file=>typeof file.target!=='string'||!path.isAbsolute(file.target)||!inside(op.root,file.target)||!/^.{1,}\.ini$/i.test(path.basename(file.target))||/^desktop\.ini$/i.test(path.basename(file.target))||!/^[a-f0-9]{64}$/.test(file.before)||!/^[a-f0-9]{64}$/.test(file.after))||new Set(op.files.map(file=>file.target.toLowerCase())).size!==op.files.length))throw new Error('配置档文件操作无效。');
+  if(op.version===2&&(!['profile-switch','preset-switch','preset-import'].includes(op.purpose||'')||!Array.isArray(op.files)||op.files.length>2048||op.files.some(file=>typeof file.target!=='string'||!path.isAbsolute(file.target)||!inside(op.root,file.target)||!/^.{1,}\.ini$/i.test(path.basename(file.target))||/^desktop\.ini$/i.test(path.basename(file.target))||!/^[a-f0-9]{64}$/.test(file.before)||!/^[a-f0-9]{64}$/.test(file.after))||new Set(op.files.map(file=>file.target.toLowerCase())).size!==op.files.length))throw new Error('配置档文件操作无效。');
+  if(op.purpose==='preset-switch'&&(op.files?.length||op.steps.some(step=>step.kind!=='move'||!inside(op.root,step.target)||same(op.root,step.target))||op.metadata.some(meta=>!same(meta.target,path.join(this.data,'library-'+op.gameId+'.json')))))throw new Error('预设提交只允许当前 Mod 根内目录启停及库索引。');
+  const importedProfile=(target:string)=>{if(typeof target!=='string'||!path.isAbsolute(target))return false;const relative=path.relative(path.join(this.data,'profiles',op.gameId),target).split(path.sep);return relative.length===2&&relative.every(part=>/^[a-f0-9-]{36}$/.test(part));};
+  if(op.purpose==='preset-import'&&(op.files?.length||op.steps.length>1||op.steps.some(step=>step.kind!=='swap'||!step.newOnly||step.old||!importedProfile(step.target))||op.metadata.some(meta=>!same(meta.target,path.join(this.data,'presets-'+op.gameId+'.json')))))throw new Error('清单提交只允许新建非活动配置及预设索引。');
   this.recordFile(op.id);const covers=path.join(this.data,'character-covers',op.gameId);
   op.steps.forEach((step,index)=>{
    if(!step||typeof step.target!=='string'||!path.isAbsolute(step.target))throw new Error('中断操作路径无效，未处理。');
    const workNames=['DISABLED_.kmm-operation-','.kmm-operation-'].map(prefix=>path.join(path.dirname(step.target),prefix+op.id+'-'+index));
-   if(!['swap','move'].includes(step.kind)||!(inside(op.root,step.target)||same(step.target,covers)||same(step.target,path.join(this.data,'profiles',op.gameId)))||!workNames.includes(step.work)||step.kind==='move'&&(typeof step.from!=='string'||!path.isAbsolute(step.from)||!inside(op.root,step.from)||same(step.from,op.root))||step.kind==='swap'&&step.source!==undefined&&(typeof step.source!=='string'||!path.isAbsolute(step.source)))throw new Error('中断操作路径无效，未处理。');
+   if(!['swap','move'].includes(step.kind)||!(inside(op.root,step.target)||same(step.target,covers)||same(step.target,path.join(this.data,'profiles',op.gameId))||op.purpose==='preset-import'&&importedProfile(step.target))||!workNames.includes(step.work)||step.kind==='move'&&(typeof step.from!=='string'||!path.isAbsolute(step.from)||!inside(op.root,step.from)||same(step.from,op.root))||step.kind==='swap'&&step.source!==undefined&&(typeof step.source!=='string'||!path.isAbsolute(step.source)))throw new Error('中断操作路径无效，未处理。');
    for(const item of [step.old,step.incoming])if(item&&(!/^\d+$/.test(item.dev)||!/^\d+$/.test(item.ino)))throw new Error('中断操作目录身份无效。');
   });
   const files=[path.join(this.data,'library-'+op.gameId+'.json'),path.join(this.data,'presets-'+op.gameId+'.json'),path.join(this.data,'settings.json')];
@@ -75,17 +78,20 @@ export class FileOperations {
   if((await Promise.all(op.steps.map(step=>present(path.join(step.work,'rolled-back'))))).some(Boolean)){op.phase='rolled-back';await this.store(op);}else await this.cleanup(op);
  }
  async runProfile(game:GameId,root:string,name:string,files:ProfileFileChange[],changes:Change[],metadata:MetadataChange[]){return this.run(game,root,name,changes,metadata,files);}
- async run(game:GameId,root:string,name:string,changes:Change[],metadata:MetadataChange[],files?:ProfileFileChange[]){
-  await this.assertReady(game,root);const id=randomUUID();const op:Operation={version:files?2:1,...(files?{purpose:'profile-switch',files:[]}:{}),id,gameId:game,root,name,createdAt:new Date().toISOString(),phase:'preparing',steps:[],metadata:[]};
+ async runPreset(game:GameId,root:string,name:string,changes:Change[],metadata:MetadataChange[]){return this.run(game,root,name,changes,metadata,[],'preset-switch');}
+ async runPresetImport(game:GameId,root:string,name:string,changes:Change[],metadata:MetadataChange[]){return this.run(game,root,name,changes,metadata,[],'preset-import');}
+ async run(game:GameId,root:string,name:string,changes:Change[],metadata:MetadataChange[],files?:ProfileFileChange[],purpose:'profile-switch'|'preset-switch'|'preset-import'='profile-switch',beforeCommit?:(incoming:string[])=>Promise<void>){
+  await this.assertReady(game,root);const id=randomUUID();const op:Operation={version:files?2:1,...(files?{purpose,files:[]}:{}),id,gameId:game,root,name,createdAt:new Date().toISOString(),phase:'preparing',steps:[],metadata:[]};
   let budget=0;for(const file of files||[]){await assertNoLinks(file.target);const stat=await fs.stat(file.target);if(stat.size>4*1024*1024||file.bytes.length>4*1024*1024||(budget+=stat.size+file.bytes.length)>128*1024*1024)throw new Error('配置档文件超出大小预算。');if(digest(await fs.readFile(file.target))!==file.expected)throw new Error('INI 在预览后已改变，请重新读取。');op.files!.push({target:file.target,before:file.expected,after:digest(file.bytes)});}
   for(let index=0;index<changes.length;index++){const change=changes[index];await assertNoLinks(change.target);const old=await identity(change.kind==='move'?change.from:change.target);if(change.kind==='swap'&&change.newOnly&&old)throw new Error('目标已有同名 Mod，原内容保持。');if(change.kind==='move'&&(!old||!same(change.from,change.target)&&await present(change.target)))throw new Error('移动来源已缺失或目标已存在。');op.steps.push({...change,work:path.join(path.dirname(change.target),'DISABLED_.kmm-operation-'+id+'-'+index),old});}
   for(const change of metadata){await assertNoLinks(change.target);op.metadata.push({target:change.target,before:await present(change.target),after:change.bytes!==null,gameSettings:change.gameSettings});}
   this.validate(op);await this.store(op);await logOperationReference(this.data,game,'file-operation',id);
   try{
    await fs.mkdir(this.metaFolder(id));await fs.writeFile(path.join(this.metaFolder(id),'owner'),id,{flag:'wx'});
-   for(let index=0;index<metadata.length;index++){if(op.metadata[index].before)await fs.copyFile(metadata[index].target,path.join(this.metaFolder(id),index+'-before'));if(metadata[index].bytes!==null)await fs.writeFile(path.join(this.metaFolder(id),index+'-after'),metadata[index].bytes!);}
+   for(let index=0;index<metadata.length;index++){if(op.metadata[index].before)await fs.copyFile(metadata[index].target,path.join(this.metaFolder(id),index+'-before'));if(metadata[index].expected!==undefined&&(op.metadata[index].before?digest(await fs.readFile(path.join(this.metaFolder(id),index+'-before'))):'missing')!==metadata[index].expected)throw new Error('元数据在计划确认后已改变，未提交。');if(metadata[index].bytes!==null)await fs.writeFile(path.join(this.metaFolder(id),index+'-after'),metadata[index].bytes!);}
    for(let index=0;index<(files||[]).length;index++){const file=files![index];await fs.copyFile(file.target,path.join(this.metaFolder(id),'ini-'+index+'-before'));if(digest(await fs.readFile(path.join(this.metaFolder(id),'ini-'+index+'-before')))!==file.expected)throw new Error('INI 在准备期间发生变化。');await fs.writeFile(path.join(this.metaFolder(id),'ini-'+index+'-after'),file.bytes);}
    for(const step of op.steps){await fs.mkdir(path.dirname(step.work),{recursive:true});await fs.mkdir(step.work);await fs.writeFile(path.join(step.work,'owner'),id,{flag:'wx'});if(step.kind==='swap'&&step.source){await copy(step.source,path.join(step.work,'incoming'));step.incoming=await identity(path.join(step.work,'incoming'));}}
+   if(beforeCommit)await beforeCommit(op.steps.filter(step=>step.kind==='swap'&&step.source).map(step=>path.join(step.work,'incoming')));
    op.phase='applying';await this.store(op);
    for(let index=0;index<(files||[]).length;index++)await writeAtomicFile(files![index].target,files![index].bytes,files![index].expected);
    for(const step of op.steps){await fs.mkdir(path.dirname(step.target),{recursive:true});await assertNoLinks(step.target);if(step.kind==='move'){if(!matches(await identity(step.from),step.old)||!same(step.from,step.target)&&await present(step.target))throw new Error('移动目录在准备期间改变，未覆盖。');await moveDirectory(step.from,step.target);}else{if(step.old){if(!matches(await identity(step.target),step.old))throw new Error('目标目录在准备期间改变，未覆盖。');await moveDirectory(step.target,path.join(step.work,'original'));}else if(await present(step.target))throw new Error('目标在准备期间出现同名目录，未覆盖。');if(step.incoming)await moveDirectory(path.join(step.work,'incoming'),step.target);}}

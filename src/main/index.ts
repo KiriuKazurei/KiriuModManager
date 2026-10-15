@@ -20,6 +20,8 @@ import {OperationLog} from './operation-log';
 import {DependencyError} from './dependencies';
 import {ModUpdates} from './mod-updates';
 import {Inspections} from './inspections';
+import {PresetManifests} from './preset-manifests';
+import {isInside} from './inspection-files';
 
 const dataDirectory = process.env.KMM_DATA_DIR;
 if (dataDirectory) {
@@ -45,6 +47,8 @@ app.whenReady().then(async () => {
   const mods = new ModService(app.getPath('userData'), async game => (await store.read()).games[game]);
   const business=new BusinessService(app.getPath('userData'),mods,store);
   const inspections=new Inspections(app.getPath('userData'),store,mods,business,app.getVersion());
+  const presetManifests=new PresetManifests(app.getPath('userData'),mods,business,store);
+  await mods.imports.initialize();
   const ini=new IniService(mods,business.recovery);
   const characterCovers=new CharacterCoverService(app.getPath('userData'),path.join(app.getAppPath(),'assets','character-covers'),mods,bytes=>!nativeImage.createFromBuffer(bytes).isEmpty());
   const deployment = new DeploymentService({ fetch: (url, options) => net.fetch(url, options), cacheDirectory: path.join(app.getPath('userData'), 'downloads'), checkRuntime: () => checkRuntime() });
@@ -53,7 +57,7 @@ app.whenReady().then(async () => {
   const updateSource=async()=>(await store.read()).desktop?.updateSourceUrl??DEFAULT_APP_UPDATE_SOURCE;
   let pending:Promise<unknown>=Promise.resolve();
   const mutation=<T>(work:()=>Promise<T>):Promise<T>=>{const task=pending.then(work);pending=task.catch(()=>{});return task;};
-  finishFileOperations=async()=>{await pending;await operationLog.flush();};
+  finishFileOperations=async()=>{await mods.imports.close();await pending;await operationLog.flush();};
   const showMain=()=>{window?.show();if(window?.isMinimized())window.restore();window?.focus();};
   const broadcast=async(settingsChanged=false)=>{const settings=await store.read();for(const target of [window,floatingWindow])if(target&&!target.isDestroyed())target.webContents.send('desktop:changed',{gameId:settings.selectedGame,settingsChanged});};
   const trustedDocuments=new WeakMap<BrowserWindow,string>();
@@ -76,17 +80,19 @@ app.whenReady().then(async () => {
   const trayAction=(work:()=>Promise<unknown>)=>{void mutation(work).catch(error=>dialog.showErrorBox('桌面操作失败',(error as Error).message));};
   const updateTray=async()=>{if(!tray)return;const settings=await store.read();closeToTray=settings.desktop?.closeToTray??true;trayMenu=Menu.buildFromTemplate([{label:'显示主窗口',click:showMain},{type:'separator'},...(Object.keys(GAMES)as GameId[]).map(game=>({label:GAMES[game].name,type:'radio' as const,checked:settings.selectedGame===game,click:()=>trayAction(()=>chooseGame(game))})),{type:'separator'},{label:'快速管理浮窗',type:'checkbox',checked:!!floatingWindow,click:()=>trayAction(()=>toggleFloating(!floatingWindow))},{label:'退出 Kiriu Mod Manager',click:()=>app.quit()}]);tray.setContextMenu(trayMenu);};
   // Progress and window controls remain available while a file operation or native dialog waits.
-  const responsiveChannels=new Set(['desktop:window-theme','desktop:status','desktop:floating','desktop:show','desktop:quit','deployment:progress','runtime:check','runtime:download','directory:choose','update:status','update:check','update:download','market:view','market:status','market:navigate','market:download-action','market:install-plan','inspection:read','inspection:cancel','conflicts:details','recovery:cleanup-job']);
+  const responsiveChannels=new Set(['desktop:window-theme','desktop:status','desktop:floating','desktop:show','desktop:quit','deployment:progress','runtime:check','runtime:download','directory:choose','update:status','update:check','update:download','market:view','market:status','market:navigate','market:download-action','market:install-plan','mod-import:files','mod-import:discard','inspection:read','inspection:cancel','conflicts:details','recovery:cleanup-job']);
   const handle = <C extends IPCChannel>(channel:C, work:(...args:IPCArguments<C>)=>Promise<IPCValue<C>>) => {
     ipcMain.handle(channel, async (event: IpcMainInvokeEvent, ...args: unknown[]): Promise<Result<IPCValue<C>>> => {
       const sender=[window,floatingWindow].find(target=>target&&!target.isDestroyed()&&event.sender===target.webContents);
       if (!sender || event.senderFrame !== sender.webContents.mainFrame || documentUrl(event.senderFrame.url)!==trustedDocuments.get(sender)) return { ok: false, error: '此页面无权访问桌面接口。' };
+      if((channel.startsWith('mod-import:')||channel==='mods:import')&&sender!==window)return {ok:false,error:'请在主窗口使用导入预检。'};
       if(channel==='desktop:window-theme'&&sender!==window)return {ok:false,error:'请在主窗口设置标题栏主题。'};
+      if((channel.startsWith('preset-manifest:')||['presets:preview','presets:commit','presets:apply'].includes(channel))&&sender!==window)return {ok:false,error:'请在主窗口使用预设预览与清单。'};
       if((channel.startsWith('inspection:')||channel.startsWith('diagnostics:')||['recovery:restore','recovery:create','recovery:protect','recovery:prepare-restore','recovery:apply-restore','recovery:prepare-cleanup','recovery:apply-cleanup','recovery:cleanup-job','conflicts:details'].includes(channel))&&sender!==window)return {ok:false,error:'请在主窗口使用诊断、恢复管理和冲突详情。'};
       if((channel.startsWith('market:')||channel==='desktop:link'&&args[1]==='market')&&sender!==window)return {ok:false,error:'请在主窗口使用获取 Mod 和下载进度。'};
       const run=async():Promise<Result<IPCValue<C>>>=>{
       if(updater.status.stage==='installing'&&!['update:status','desktop:status','desktop:show','desktop:quit'].includes(channel))return {ok:false,error:'正在退出并安装更新，请等待重新打开。'};
-      try { const value=await operationLog.run(channel,args,()=>work(...args as IPCArguments<C>),sender===floatingWindow?'floating':'main');if(/^(settings:(save|save-game-paths|save-desktop-preferences)|mods:(operate|batch|exclusive-save|exclusive-delete|import|replace|delete|choose-cover|group)|presets:(save|add-members|delete|apply)|profiles:(capture|duplicate|apply)|ini:save|recovery:(create|restore|apply-restore|apply-cleanup|protect)|xxmi:(deploy|sync))$/.test(channel)){if(args[0]==='zzz'||args[0]==='endfield')inspections.jobs.invalidate(args[0]);await broadcast(/^(settings:(save|save-game-paths|save-desktop-preferences)|recovery:(restore|apply-restore)|xxmi:(deploy|sync))$/.test(channel));await updateTray();}return { ok: true, value }; }
+      try { const value=await operationLog.run(channel,args,()=>work(...args as IPCArguments<C>),sender===floatingWindow?'floating':'main');if(/^(settings:(save|save-game-paths|save-desktop-preferences)|mods:(operate|batch|exclusive-save|exclusive-delete|import|replace|delete|choose-cover|group)|presets:(save|add-members|delete|apply|commit)|mod-import:commit|preset-manifest:(commit|replacement)|profiles:(capture|duplicate|apply)|ini:save|recovery:(create|restore|apply-restore|apply-cleanup|protect)|xxmi:(deploy|sync))$/.test(channel)&&!(['presets:commit','mod-import:commit'].includes(channel)&&value===null)){if(args[0]==='zzz'||args[0]==='endfield')inspections.jobs.invalidate(args[0]);await broadcast(/^(settings:(save|save-game-paths|save-desktop-preferences)|recovery:(restore|apply-restore)|xxmi:(deploy|sync))$/.test(channel));await updateTray();}return { ok: true, value }; }
       catch (error) {
         if(['mods:operate','mods:exclusive-save','recovery:restore','recovery:apply-restore'].includes(channel))await broadcast().catch(()=>{});
         if(error instanceof DependencyError)return {ok:false,error:error.message,code:error.code,details:error.details};
@@ -98,7 +104,48 @@ app.whenReady().then(async () => {
       return responsiveChannels.has(channel)?run():mutation(run);
     });
   };
+  const confirmImport=async(game:GameId,token:string,acceptIncomplete:boolean)=>{
+    const preview=mods.imports.readPlan(game,token);if(!preview.canCommit)throw new Error('所选条目存在阻挡，请修改后更新预检。');
+    const selected=preview.items.filter(i=>i.selected);const choice=await dialog.showMessageBox(window!,{type:'question',title:'确认导入 Mod',message:`导入 ${selected.length} 项 Mod（默认停用）？`,detail:[GAMES[game].name+' · '+preview.root,...selected.map(i=>[i.folder,'DISABLED_'+i.name].filter(Boolean).join('/')+' · '+i.bytes+' 字节'),`跳过 ${preview.items.length-selected.length} 项；不覆盖已有内容。`,...preview.space.map(v=>v.location+' 需要 '+v.required+' 字节，可用 '+(v.available??'未知'))].join('\n').slice(0,16000),buttons:['取消','确认导入'],defaultId:0,cancelId:0});
+    if(choice.response!==1)return null;
+    if(preview.downloadTaskId)await browser().beginImport(preview.downloadTaskId);
+    try{const result=await mods.imports.commit(game,token,acceptIncomplete);if(preview.downloadTaskId)await browser().recordImport(preview.downloadTaskId,result);return result;}catch(error){if(preview.downloadTaskId)await browser().failImport(preview.downloadTaskId,(error as Error).message).catch(()=>{});throw error;}
+  };
+  const legacyImport=async(game:GameId,files:string[])=>{
+    const preview=await mods.imports.prepareLocal(game,files);
+    try{return await confirmImport(game,preview.token,false)||{library:await mods.scan(game),importedIds:[],errors:[],canceled:true};}finally{await mods.imports.discard(game,preview.sessionId);}
+  };
+  handle('mod-import:prepare',async(game,source)=>{
+    if(!source||!['folder','archive','download'].includes(source.kind))throw new Error('导入来源类型无效。');
+    if(source.kind==='download'){const input=browser().importSource(source.taskId);if(input.gameId!==game)throw new Error('下载任务与所选游戏不匹配。');return inspections.jobs.start('mod-import',game,(await store.read()).games[game],async(signal,progress)=>{try{return await mods.imports.prepareDownload(game,input,signal,progress);}catch(error){if(!signal.aborted)await browser().failImport(source.taskId,(error as Error).message).catch(()=>{});throw error;}},undefined,JSON.stringify(source));}
+    const choice=await selectSource(source.kind,true);if(choice.canceled||!choice.filePaths.length)return null;
+    return inspections.jobs.start('mod-import',game,(await store.read()).games[game],(signal,progress)=>mods.imports.prepareLocal(game,choice.filePaths,signal,progress),undefined,JSON.stringify(choice.filePaths));
+  });
+  handle('mod-import:revise',async(game,id,choices)=>inspections.jobs.start('mod-import',game,(await store.read()).games[game],(signal,progress)=>mods.imports.revise(game,id,choices,signal,progress),undefined,JSON.stringify([id,choices])));
+  handle('mod-import:files',(game,id,entry,offset)=>mods.imports.files(game,id,entry,offset));
+  handle('mod-import:commit',(game,token,accept)=>confirmImport(game,token,accept));
+  handle('mod-import:discard',(game,id)=>mods.imports.discard(game,id));
   handle('settings:read', () => store.read());
+  handle('presets:preview',async(game,id,choices,excluded)=>inspections.jobs.start('preset-preview',game,(await store.read()).games[game],async(signal,progress)=>{progress('核对预设最终启停与联动');return business.presetPlanner.prepare(game,id,choices,excluded,signal);},undefined,JSON.stringify([id,choices,excluded])));
+  const confirmPreset=async(game:GameId,token:string,confirmation?:import('../shared/contracts').DependencyConfirmation)=>{
+    const stored=await business.presetPlanner.validate(game,token);if(!stored.plan.canApply)throw new Error('请处理预览中的阻挡后重新预览。');
+    const choice=await dialog.showMessageBox(window!,{type:'question',title:'确认应用预设',message:'应用“'+stored.plan.name+'”？',detail:[`游戏：${GAMES[game].name}；根：${stored.plan.root}`,`实际目录变化 ${stored.plan.changes} 项；不写 INI。`,...stored.plan.rows.filter(row=>['enable','disable'].includes(row.status)).slice(0,80).map(row=>`${row.desired?'启用':'停用'} ${row.name}${row.outside?'（预设外联动）':''}`)].join('\n'),buttons:['取消','应用预设'],defaultId:0,cancelId:0});
+    return choice.response===1?business.presetPlanner.commit(game,token,confirmation):null;
+  };
+  handle('presets:commit',(game,token,confirmation)=>confirmPreset(game,token,confirmation));
+  handle('preset-manifest:prepare-export',async(game,id,includeProfile)=>inspections.jobs.start('preset-export',game,(await store.read()).games[game],(signal,progress)=>presetManifests.prepareExport(game,id,includeProfile,signal,progress),undefined,JSON.stringify([id,includeProfile])));
+  handle('preset-manifest:export',async(game,token)=>{const plan=presetManifests.readExport(game,token),extension=plan.manifest.profile?'zip':'json';const choice=await dialog.showSaveDialog(window!,{title:'导出预设清单',defaultPath:plan.preview.name+(plan.manifest.profile?'.kmm-profile.zip':'.kmm-preset.json'),filters:[{name:'Kiriu 预设清单',extensions:[extension]}],properties:['showOverwriteConfirmation']});return choice.canceled||!choice.filePath?null:presetManifests.export(game,token,choice.filePath);});
+  handle('preset-manifest:prepare-import',async(game,draftId)=>{
+    let file:string|undefined;if(!draftId){const choice=await dialog.showOpenDialog(window!,{title:'导入预设清单',properties:['openFile'],filters:[{name:'Kiriu 预设清单／配置',extensions:['json','zip']}]});if(choice.canceled||!choice.filePaths[0])return null;file=choice.filePaths[0];}
+    return inspections.jobs.start('preset-import',game,(await store.read()).games[game],(signal,progress)=>presetManifests.prepareImport(game,file,draftId,signal,progress),undefined,JSON.stringify([file,draftId]));
+  });
+  handle('preset-manifest:revise',async(game,id,choices)=>inspections.jobs.start('preset-import',game,(await store.read()).games[game],(signal,progress)=>presetManifests.revise(game,id,choices,signal,progress),undefined,JSON.stringify([id,choices])));
+  handle('preset-manifest:commit',(game,token,options)=>presetManifests.commit(game,token,options));
+  handle('preset-manifest:replacement',async(game,id,kind)=>{
+    await presetManifests.session(game,id);if(!['folder','archive'].includes(kind))throw new Error('替代来源类型无效。');const choice=await dialog.showOpenDialog(window!,{title:'导入本地替代 Mod（默认停用）',properties:[kind==='folder'?'openDirectory':'openFile'],...(kind==='archive'?{filters:[{name:'Mod 压缩包',extensions:['zip','7z','rar']}]}:{})});
+    if(choice.canceled||!choice.filePaths.length)return {library:await mods.scan(game),importedIds:[],errors:[],canceled:true};await presetManifests.session(game,id);
+    const settings=await store.read(),protectedRoots=[app.getPath('userData'),...Object.values(settings.games).map(paths=>paths.modsDirectory).filter(Boolean)];if(choice.filePaths.some(source=>protectedRoots.some(root=>isInside(root,source)||isInside(source,root))))throw new Error('替代来源不能与数据目录或任一游戏 Mod 库重叠。');return legacyImport(game,choice.filePaths);
+  });
   handle('inspection:diagnostics',game=>inspections.start('diagnostics',game));
   handle('inspection:inventory',game=>inspections.start('inventory',game));
   handle('inspection:conflicts',game=>inspections.start('conflicts',game));
@@ -130,7 +177,7 @@ app.whenReady().then(async () => {
   handle('market:view',async(game,bounds)=>browser().setView(game,bounds));
   handle('market:status',async()=>browser().status());
   handle('market:navigate',async action=>browser().navigate(action));
-  handle('market:download-action',async(id,action,destinations)=>browser().downloadAction(id,action,destinations));
+  handle('market:download-action',async(id,action,destinations)=>{if(action==='retry-install'&&!browser().status().downloads.find(t=>t.id===id)?.updateTarget)throw new Error('新 Mod 请使用下载页的统一预检安装。');return browser().downloadAction(id,action,destinations);});
   handle('market:install-plan',async id=>browser().installPlan(id));
   handle('update:check',async()=>updater.check(await updateSource()));
   handle('update:status',()=>updater.readStatus());
@@ -138,6 +185,7 @@ app.whenReady().then(async () => {
     const source=await updateSource();return updater.download(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'question',title:'下载管理器更新',message:`下载 ${release.version}？`,detail:`更新来源：${source}\n大小：${(release.size/1024**2).toFixed(1)} MiB\n\n${release.notes}`,buttons:['取消','下载更新'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});
   });
   handle('update:install',async()=>{
+    if(mods.imports.hasActive())throw new Error('请先等待导入准备／提交完成或取消，再安装管理器更新。');
     if(inspections.storage.hasActive())throw new Error('请先等待恢复区清理完成或取消，再安装管理器更新。');
     if(modBrowser?.hasActiveDownloads())throw new Error('请先等待 Mod 下载和安装完成，或取消下载，再安装管理器更新。');
     preparingUpdateInstall=true;
@@ -157,7 +205,7 @@ app.whenReady().then(async () => {
   handle('presets:save',(game:GameId,id:string|null,name:string,members:Record<string,boolean>|null)=>business.savePreset(game,id,name,members));
   handle('presets:add-members',(game,id,modIds)=>business.addModsToPreset(game,id,modIds));
   handle('presets:delete',(game:GameId,id:string)=>business.deletePreset(game,id));
-  handle('presets:apply',(game,id,choices,confirmation)=>business.applyPreset(game,id,choices,confirmation));
+  handle('presets:apply',async(game,id,choices,confirmation)=>{const plan=await business.presetPlanner.prepare(game,id,choices);if(plan.dependency.issues.some(issue=>issue.severity==='block'))throw new DependencyError(plan.dependency);if(!plan.canApply)return {library:await mods.scan(game),applied:0,conflicts:plan.conflicts,issues:plan.blockers};const result=await confirmPreset(game,plan.token,confirmation);return {library:result?.library||await mods.scan(game),applied:result?(result.applied+result.unchanged):0,conflicts:[],issues:result?[]:['已取消应用预设。']};});
   handle('profiles:scope',(game,id)=>business.profiles.scope(game,id));
   handle('profiles:capture',(game,id,name,scope)=>business.profiles.capture(game,id,name,scope));
   handle('profiles:duplicate',(game,id,name)=>business.profiles.duplicate(game,id,name));
@@ -194,7 +242,7 @@ app.whenReady().then(async () => {
     return dialog.showOpenDialog(window!, { title:kind==='folder'?'选择本地 Mod 文件夹':'选择 Mod 压缩包', properties:kind==='folder'?(multiple?['openDirectory','multiSelections']:['openDirectory']):(multiple?['openFile','multiSelections']:['openFile']), filters:kind==='archive'?[{name:'Mod 压缩包',extensions:['zip','7z','rar']}]:undefined });
   };
   handle('mods:import', async (game: GameId,kind: 'folder'|'archive') => {
-    const source=await selectSource(kind,true); if(source.canceled) return {library:await mods.scan(game),importedIds:[],errors:[],canceled:true}; return mods.import(game,source.filePaths);
+    const source=await selectSource(kind,true); if(source.canceled) return {library:await mods.scan(game),importedIds:[],errors:[],canceled:true}; return legacyImport(game,source.filePaths);
   });
   handle('mods:replace', async (game,id,kind,confirmation) => {
     const source=await selectSource(kind,false); return source.canceled?null:mods.replace(game,id,source.filePaths[0],confirmation);

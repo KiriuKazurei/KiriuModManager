@@ -31,13 +31,16 @@
     "api:inventory": "node scripts/api-inventory.mjs --write",
     "api:check": "node scripts/api-inventory.mjs",
     "smoke:v004": "node scripts/smoke-v004.mjs",
-    "smoke:second-batch": "node scripts/smoke-second-batch.mjs"
+    "smoke:second-batch": "node scripts/smoke-second-batch.mjs",
+    "smoke:preset-workflows": "node scripts/smoke-preset-workflows.mjs",
+    "smoke:imports": "node scripts/smoke-import-workflows.mjs"
   },
   "dependencies": {
     "7zip-bin-full": "^26.4.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "yauzl": "^3.4.0"
+    "yauzl": "^3.4.0",
+    "fflate": "^0.8.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -46,7 +49,6 @@
     "@types/yauzl": "^3.4.0",
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "44.7.0",
-    "fflate": "^0.8.3",
     "playwright": "^1.56.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0",

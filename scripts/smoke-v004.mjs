@@ -20,6 +20,29 @@ try{await launch();assert.equal(value(await request('desktopStatus')).version,'0
  const org=page.locator('.organization-panel');await org.getByText('依赖与兼容声明',{exact:true}).click();await org.getByLabel('Provider',{exact:true}).check();await org.getByRole('button',{name:'保存依赖声明',exact:true}).click();await page.getByText('依赖声明已保存。',{exact:true}).waitFor();await page.getByRole('button',{name:'启用 Mod',exact:true}).click();await page.locator('.feedback .error').filter({hasText:'缺失或停用'}).waitFor();assert.equal(value(await request('scanMods',game)).mods.find(m=>m.id===consumer.id).enabled,false);await row('Provider');await page.getByRole('button',{name:'启用 Mod',exact:true}).click();await page.getByRole('button',{name:'停用 Mod',exact:true}).waitFor();await row('Consumer');await page.getByRole('button',{name:'启用 Mod',exact:true}).click();await page.getByRole('button',{name:'停用 Mod',exact:true}).waitFor();
  const floatingPromise=app.waitForEvent('window');value(await request('floating',true));const floating=await floatingPromise;floating.on('dialog',dialog=>dialog.accept());await floating.getByRole('button',{name:'停用 Provider',exact:true}).click();await floating.getByRole('button',{name:'启用 Provider',exact:true}).waitFor();await floating.getByRole('button',{name:'启用 Consumer',exact:true}).waitFor();value(await request('floating',false));assert.equal(value(await request('scanMods',game)).mods.find(m=>m.id===consumer.id).enabled,false);await page.locator('.organization-panel').scrollIntoViewIfNeeded();await shot(game+'-organization.png');checks.push(game+': actual star/tag/filter/draft controls, dependency form, blocked enable and confirmed floating cascade');
  await page.getByRole('button',{name:'预设',exact:true}).click();await page.getByLabel('预设名称',{exact:true}).fill('配置 '+game);const create=page.getByRole('region',{name:'创建独立配置档'});await create.getByRole('button',{name:'捕获当前 INI',exact:true}).click();await create.getByRole('button',{name:'确认捕获所选 INI',exact:true}).click();await create.getByText('独立配置修订已保存。',{exact:true}).waitFor();const preset=value(await request('presets',game)).at(-1);assert.equal(preset.mode,'profile');const detail=page.getByRole('region',{name:'独立配置档'});await detail.getByRole('button',{name:'复制配置档',exact:true}).click();await detail.getByText('已复制保存的配置副本，未读取当前活动文件。',{exact:true}).waitFor();const ini=value(await request('readIni',game,consumer.id,'main.ini'));value(await request('saveIni',game,consumer.id,'main.ini',ini.digest,{kind:'text',text:'[KeyCycle]\nkey=VK_F9; runtime'}));await detail.getByRole('button',{name:'预览配置切换',exact:true}).click();await detail.getByLabel('配置修改处理',{exact:true}).waitFor();await detail.getByRole('button',{name:'确认切换配置',exact:true}).click();await detail.getByText('配置已切换，INI 与启停状态已提交。',{exact:true}).waitFor();assert.match(value(await request('readIni',game,consumer.id,'main.ini')).text,/VK_F1/);await shot(game+'-profiles.png');checks.push(game+': actual INI capture/copy, dirty preview, recoverable switch and disk configuration restoration');
+ const warningMod=value(await request('scanMods',game)).mods.find(m=>m.name==='Other');
+ value(await request('operateMod',game,warningMod.id,{kind:'requirements',value:{origin:'manual',mods:[],components:[{component:'importer',minimumVersion:'1.0'}]}}));
+ const warningPreset=value(await request('savePreset',game,null,'版本提示 '+game,{[warningMod.id]:true})).at(-1);
+ value(await request('profileCapture',game,warningPreset.id,warningPreset.name,[{modId:warningMod.id,relativePath:'main.ini'}]));
+ await write(path.join(settings.games[game].modsDirectory,warningMod.relativePath,'main.ini'),'runtime warning '+game);
+ await page.locator('.tool-row').filter({hasText:'版本提示 '+game}).click();
+ const warningDetail=page.getByRole('region',{name:'独立配置档'});
+ await warningDetail.getByRole('button',{name:'预览配置切换',exact:true}).click();
+ await warningDetail.getByText(/importer 安装版本未知/).waitFor();
+ assert.equal(await warningDetail.getByRole('button',{name:'确认切换配置',exact:true}).isDisabled(),true);
+ await warningDetail.getByRole('button',{name:'取消切换',exact:true}).click();
+ assert.equal(value(await request('readIni',game,warningMod.id,'main.ini')).text,'runtime warning '+game);
+ assert.equal(value(await request('scanMods',game)).mods.find(m=>m.id===warningMod.id).enabled,false);
+ await warningDetail.getByRole('button',{name:'预览配置切换',exact:true}).click();
+ await warningDetail.getByLabel('接受本次操作的版本提示及联动停用',{exact:true}).check();
+ await warningDetail.getByRole('button',{name:'确认切换配置',exact:true}).click();
+ await warningDetail.getByText('配置已切换，INI 与启停状态已提交。',{exact:true}).waitFor();
+ assert.match(value(await request('readIni',game,warningMod.id,'main.ini')).text,/VK_F1/);
+ assert.equal(value(await request('scanMods',game)).mods.find(m=>m.id===warningMod.id).enabled,true);
+ await shot(game+'-profile-warning.png');
+ checks.push(game+': actual profile version-warning preview blocks unaccepted execution, cancel leaves runtime bytes/state, explicit acceptance restores captured bytes and enables only its member');
+ value(await request('operateMod',game,warningMod.id,{kind:'requirements',value:{origin:'manual',mods:[],components:[]}}));
+ value(await request('operateMod',game,warningMod.id,{kind:'toggle',enabled:false}));
  }
  // Controlled provider is used to exercise real session/native download events, not to claim external integration.
  const game='endfield',library=value(await request('scanMods',game)),mod=library.mods.find(m=>m.name==='Other'),zip=Buffer.from(zipSync({'Variant/main.ini':Buffer.from('[KeyCycle]\nkey=VK_F8; candidate')}));

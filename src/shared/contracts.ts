@@ -1,4 +1,6 @@
+import type {ImportSource,ImportChoice,ImportReceipt,ImportFilePage} from './import-workflows';
 import type {InspectionJob,ReportOptions,DiagnosticExport,RestorePreview,CleanupPreview,CleanupJob,ConflictDetails,ManagedReference} from './inspections';
+import type {PresetManifestMember,PresetCommitResult,ManifestChoice,PresetImportOptions,PresetImportReceipt} from './preset-workflows';
 export const GAMES = {
   zzz: { name: '绝区零', importer: 'ZZMI', subtitle: 'Zenless Zone Zero' },
   endfield: { name: '终末地', importer: 'EFMI', subtitle: 'Arknights: Endfield' },
@@ -50,7 +52,7 @@ export type BatchModOperation=Extract<ModOperation,{kind:'toggle'|'classify'}>;
 export interface BatchModItem {id:string;name:string;ok:boolean;error?:string;message?:string}
 export interface BatchModResult {library:LibrarySnapshot;items:BatchModItem[];conflicts:ExclusiveConflict[]}
 export interface ImportResult { library: LibrarySnapshot; importedIds: string[]; errors: string[]; canceled: boolean }
-export interface Preset { id:string; name:string; members:Record<string,boolean>; updatedAt:string; mode?:'states'|'profile';profileRef?:{revision:string} }
+export interface Preset { id:string; name:string; members:Record<string,boolean>; updatedAt:string; mode?:'states'|'profile';profileRef?:{revision:string};missingMods?:PresetManifestMember[] }
 export interface ProfileScope {modId:string;relativePath:string}
 export interface ProfileStatus {active?:ActiveProfile;dirty:boolean;issues:string[];files:(ProfileScope&{sourceRevision:string;digest:string})[]}
 export interface ProfileApplyPlan {token:string;presetId:string;dirty:boolean;strategy:'backup'|'save';issues:string[];dependency:DependencyPlan;files:ProfileScope[]}
@@ -71,6 +73,19 @@ export interface AppUpdateStatus {
   lastResult?:{stage:string;message:string;backup?:string};
 }
 export interface DesktopAPI {
+  prepareModImport(game:GameId,source:ImportSource):Promise<Result<InspectionJob|null>>;
+  reviseModImport(game:GameId,sessionId:string,choices:ImportChoice[]):Promise<Result<InspectionJob>>;
+  modImportFiles(game:GameId,sessionId:string,entryId:string,offset?:number):Promise<Result<ImportFilePage>>;
+  commitModImport(game:GameId,token:string,acceptIncomplete:boolean):Promise<Result<ImportReceipt|null>>;
+  discardModImport(game:GameId,sessionId:string):Promise<Result<void>>;
+  preparePresetApply(game:GameId,id:string,choices?:ExclusiveChoices,excludedIds?:string[]):Promise<Result<InspectionJob>>;
+  commitPresetApply(game:GameId,token:string,confirmation?:DependencyConfirmation):Promise<Result<PresetCommitResult|null>>;
+  preparePresetExport(game:GameId,id:string,includeProfile:boolean):Promise<Result<InspectionJob>>;
+  exportPresetManifest(game:GameId,token:string):Promise<Result<string|null>>;
+  preparePresetManifestImport(game:GameId,draftId?:string):Promise<Result<InspectionJob|null>>;
+  revisePresetManifestImport(game:GameId,sessionId:string,choices:ManifestChoice[]):Promise<Result<InspectionJob>>;
+  commitPresetManifestImport(game:GameId,token:string,options:PresetImportOptions):Promise<Result<PresetImportReceipt>>;
+  importPresetReplacement(game:GameId,sessionId:string,kind:'folder'|'archive'):Promise<Result<ImportResult>>;
   startDiagnostics(game:GameId):Promise<Result<InspectionJob>>;
   startRecoveryInventory(game:GameId):Promise<Result<InspectionJob>>;
   startConflictInspection(game:GameId):Promise<Result<InspectionJob>>;

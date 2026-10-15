@@ -21,6 +21,42 @@ async function fixture(){const parent=path.resolve('.run-data/v004-tests');await
 const requirements=(mods:ModRequirements['mods']=[],components:ModRequirements['components']=[],gameVersion?:string):ModRequirements=>({origin:'manual',mods,components,...(gameVersion?{gameVersion}:{})});
 async function confirmation(work:()=>Promise<unknown>):Promise<DependencyConfirmation>{try{await work();throw new Error('expected confirmation');}catch(e){assert.ok(e instanceof DependencyError);assert.ok(e.details.issues.every(x=>x.severity==='warning'));return {token:e.details.token,acceptWarnings:true};}}
 
+test('profile warning confirmation can retry the same preview without writing before acceptance in both games',async()=>{
+ for(const game of ['zzz','endfield'] as const){
+  const f=await fixture(),mod=(await f.mods.scan(game)).mods[0];
+  await f.mods.operate(game,mod.id,{kind:'requirements',value:requirements([],[{component:'importer',minimumVersion:'1.0'}])});
+  const preset=(await f.business.savePreset(game,null,'Warning retry',{[mod.id]:true}))[0];
+  await f.business.profiles.capture(game,preset.id,preset.name,[{modId:mod.id,relativePath:'main.ini'}]);
+  const {directory}=await f.mods.context(game,mod.id),file=path.join(directory,'main.ini');
+  await fs.writeFile(file,'runtime edit before warning');
+  const plan=await f.business.profiles.prepare(game,preset.id),beforeRegistry=await fs.readFile(path.join(f.data,'library-'+game+'.json'));
+  assert.ok(plan.dependency.issues.some(issue=>issue.severity==='warning'&&issue.message.includes('安装版本未知')));
+  const accept=await confirmation(()=>f.business.profiles.apply(game,plan.token,'backup'));
+  assert.equal(await fs.readFile(file,'utf8'),'runtime edit before warning');
+  assert.deepEqual(await fs.readFile(path.join(f.data,'library-'+game+'.json')),beforeRegistry);
+  assert.equal((await f.business.recovery.list(game)).length,0);
+  const applied=await f.business.profiles.apply(game,plan.token,'backup',accept);
+  assert.equal(applied!.mods.find(item=>item.id===mod.id)!.enabled,true);
+  assert.match((await f.ini.read(game,mod.id,'main.ini')).text,/VK_F1/);
+  assert.equal((await f.business.recovery.list(game)).length,1);
+  await assert.rejects(f.business.profiles.apply(game,plan.token,'backup',accept),/过期/);
+ }
+});
+
+test('canceling a profile warning preview consumes it without writing files or creating backups',async()=>{
+ const f=await fixture(),game='zzz',mod=(await f.mods.scan(game)).mods[0];
+ await f.mods.operate(game,mod.id,{kind:'requirements',value:requirements([],[{component:'importer',minimumVersion:'1.0'}])});
+ const preset=(await f.business.savePreset(game,null,'Cancel warning',{[mod.id]:true}))[0];
+ await f.business.profiles.capture(game,preset.id,preset.name,[{modId:mod.id,relativePath:'main.ini'}]);
+ const {directory}=await f.mods.context(game,mod.id),file=path.join(directory,'main.ini'),before=await fs.readFile(file),registry=await fs.readFile(path.join(f.data,'library-'+game+'.json'));
+ const plan=await f.business.profiles.prepare(game,preset.id);
+ assert.equal(await f.business.profiles.apply(game,plan.token,'cancel'),null);
+ assert.deepEqual(await fs.readFile(file),before);
+ assert.deepEqual(await fs.readFile(path.join(f.data,'library-'+game+'.json')),registry);
+ assert.equal((await f.business.recovery.list(game)).length,0);
+ await assert.rejects(f.business.profiles.apply(game,plan.token,'backup',{token:plan.dependency.token,acceptWarnings:true}),/过期/);
+});
+
 test('tags normalize Unicode and deduplicate without altering display case; version comparison never guesses custom versions',()=>{assert.deepEqual(normalizeTags([' e\u0301 ','É','夏装','summer','SUMMER']),['é','夏装','summer']);for(const tags of [['bad\nvalue'],[''],['a'.repeat(41)],Array(21).fill('x')])assert.throws(()=>normalizeTags(tags));assert.equal(compareVersions('v1.2','1.2.0'),0);assert.equal(compareVersions('1.10','1.9'),1);assert.equal(compareVersions('release-new','1.0'),null);assert.equal(compareVersions('1.0-beta','1.0'),null);});
 test('favorites/tags survive rename, classification and replacement; single-content restore retains current organization and full snapshot restores snapshot values',async()=>{const f=await fixture();for(const game of ['zzz','endfield'] as const){let mod=(await f.mods.scan(game)).mods.find(m=>m.name==='Other')!;await f.mods.operate(game,mod.id,{kind:'favorite',value:true});await f.mods.operate(game,mod.id,{kind:'tags',values:['夏装','Favorite']});await f.mods.operate(game,mod.id,{kind:'rename',name:'Renamed'});await f.mods.operate(game,mod.id,{kind:'classify',category:'角色',character:'测试角色',appearance:''});const source=path.join(f.run,'replacement');await write(path.join(source,'new.ini'),'new');await f.mods.replace(game,mod.id,source);const backup=(await f.business.recovery.list(game)).find(x=>x.kind==='mod-replace')!;mod=(await f.mods.scan(game)).mods.find(m=>m.id===mod.id)!;assert.equal(mod.favorite,true);assert.deepEqual(mod.tags,['夏装','Favorite']);await f.mods.operate(game,mod.id,{kind:'favorite',value:false});await f.mods.operate(game,mod.id,{kind:'tags',values:['Changed']});await f.business.restore(game,backup.id);mod=(await f.mods.scan(game)).mods.find(m=>m.id===mod.id)!;assert.equal(mod.favorite,false);assert.deepEqual(mod.tags,['Changed']);const snapshot=(await f.business.createBackup(game,'组织快照')).find(x=>x.kind==='snapshot')!;await f.mods.operate(game,mod.id,{kind:'favorite',value:true});await f.business.restore(game,snapshot.id);assert.equal((await f.mods.scan(game)).mods.find(m=>m.id===mod.id)!.favorite,false);}});
 test('old registry receives stable content revisions once and malformed optional fields are preserved/rejected',async()=>{const f=await fixture();const a=(await f.mods.scan('zzz')).mods[0];const file=path.join(f.data,'library-zzz.json'),data=JSON.parse(await fs.readFile(file,'utf8'));delete data.records[a.id].contentRevision;delete data.records[a.id].favorite;delete data.records[a.id].tags;await fs.writeFile(file,JSON.stringify(data));const first=(await f.mods.scan('zzz')).mods.find(m=>m.id===a.id)!;assert.equal(first.favorite,false);assert.deepEqual(first.tags,[]);assert.equal((await f.mods.scan('zzz')).mods.find(m=>m.id===a.id)!.contentRevision,first.contentRevision);data.records[a.id].favorite='bad';await fs.writeFile(file,JSON.stringify(data));await assert.rejects(f.mods.scan('zzz'),/收藏数据/);assert.match(await fs.readFile(file,'utf8'),/bad/);});

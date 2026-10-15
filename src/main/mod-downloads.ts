@@ -104,6 +104,28 @@ export class ModDownloads {
   if(!root||!task.status.targetRoot||path.resolve(root).toLowerCase()!==path.resolve(task.status.targetRoot).toLowerCase())throw new ModDirectoryChangedError();
   await this.mark(task,'ready',task.status.updateTarget?'候选包校验完成，等待确认替换指定 Mod。':task.binding.remote.checksum?'下载与校验完成，等待安装；安装后默认停用。':'下载完成，已核对大小（网站未提供摘要），等待安装。');
  }
+ importSource(id:string){
+  this.assertReady();const task=this.tasks.find(t=>t.status.id===id);
+  if(!task||task.running||task.status.updateTarget||activeStages.includes(task.status.stage)||!task.binding||!task.status.archiveReady)throw new Error('请等待完整包与绑定准备完成；定向更新使用原替换入口。');
+  const fingerprint=JSON.stringify([task.status.gameId,task.status.targetRoot,task.binding]);
+  return {gameId:task.status.gameId,file:this.file(task),root:task.status.targetRoot,binding:structuredClone(task.binding),taskId:id,validate:async()=>{
+    this.assertReady();if(task.running||task.status.updateTarget||!task.status.archiveReady||fingerprint!==JSON.stringify([task.status.gameId,task.status.targetRoot,task.binding]))throw new Error('下载任务或网站绑定已改变，请重新预检。');
+    if(task.status.targetRoot!==await this.options.root(task.status.gameId)){await this.mark(task,'waiting-directory',new ModDirectoryChangedError().message);throw new ModDirectoryChangedError();}
+  }};
+ }
+ async beginImport(id:string){
+  this.assertReady();const task=this.tasks.find(t=>t.status.id===id);if(!task||task.running||task.status.updateTarget||activeStages.includes(task.status.stage)||!task.status.archiveReady||!task.binding)throw new Error('下载任务未准备好或正在提交。');
+  await this.mark(task,'installing','正在提交已确认的导入计划；停止将在完整条目边界生效。');
+ }
+ async failImport(id:string,message:string){const task=this.tasks.find(t=>t.status.id===id);if(task&&!task.running&&task.status.stage!=='waiting-directory')await this.mark(task,'error',message+' 完整包已保留，请重新预检。');}
+ async recordImport(id:string,result:import('../shared/import-workflows').ImportReceipt){
+  const task=this.tasks.find(t=>t.status.id===id);if(!task||task.status.updateTarget)throw new Error('下载任务不存在。');
+  const previous=task.status.items.filter(item=>item.ok&&item.id);const incoming=result.items.filter(item=>item.state!=='skipped').map(item=>({name:item.name,ok:item.ok,...(item.id!==undefined?{id:item.id}:{}),...(item.existing!==undefined?{existing:item.existing}:{}),...(item.error!==undefined?{error:item.error}:{})}));
+  task.status.items=[...previous.filter(old=>!incoming.some(item=>item.id===old.id)),...incoming];task.status.importedIds=[...new Set([...task.status.importedIds,...result.importedIds])];
+  const skipped=result.items.filter(i=>i.state==='skipped').length;
+  const anyInstalled=task.status.items.some(i=>i.ok),stage:ModDownload['stage']=result.canceled?(anyInstalled?'partial':'interrupted'):result.errors.length?(anyInstalled?'partial':'error'):skipped?(anyInstalled?'partial':'ready'):'complete';
+  await this.mark(task,stage,`本次新安装 ${result.importedIds.length} 项，默认停用；跳过 ${skipped} 项。${result.errors.join('；')}${skipped?' 未选条目可重新预检安装。':''}`);
+ }
  async installPlan(id:string){
   this.assertReady();const task=this.tasks.find(task=>task.status.id===id);
   if(!task||task.running||activeStages.includes(task.status.stage)||!task.binding||!task.status.archiveReady)throw new Error('请等待完整包和网站信息准备完成，再选择安装位置。');

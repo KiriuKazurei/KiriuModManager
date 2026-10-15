@@ -4,6 +4,10 @@ import { randomUUID,createHash } from 'node:crypto';
 import { GameId, GAMES, GamePaths, LibrarySnapshot, ModEntry, ModMetadata, ModOperation, ImportResult,ModProvenance,ExclusiveGroup,ExclusiveChoices,BatchModOperation,BatchModResult,BatchModItem } from '../shared/contracts';
 import { INITIAL_CHARACTERS, CHARACTER_ALIASES } from '../shared/characters';
 import { assertNoLinks, containedPath } from './archive';
+import {ImportPlanner} from './import-planner';
+import {optionalDigest} from './inspection-files';
+import type {ModTreeHash} from '../shared/preset-workflows';
+import {hashModTree} from './content-fingerprint';
 import { extractModArchive } from './mod-archive';
 import { inspectXXMI } from './xxmi';
 import { RecoveryStore } from './recovery';
@@ -30,7 +34,7 @@ export function validateRestoreRegistry(value:LibraryData){
  return value;
 }
 const disabled = (name: string) => /^DISABLED/i.test(name);
-const clean = (name: string) => name.replace(/^DISABLED_?/i, '');
+export const clean = (name: string) => name.replace(/^DISABLED_?/i, '');
 const metadata = (): ModMetadata => ({ category:'', character:'', appearance:'', author:'', description:'' });
 const initialCategories=['角色','功能','UI','场景','武器'];
 export function safeName(value: unknown, allowEmpty = false): string {
@@ -71,7 +75,7 @@ async function hasIni(root: string, depth = 0): Promise<boolean> {
   }
   return false;
 }
-async function discover(root: string, known = new Set<string>()): Promise<string[]> {
+export async function discover(root: string, known = new Set<string>()): Promise<string[]> {
   const results: string[] = []; let examined = 0;
   const walk = async (directory: string, depth: number) => {
     if (depth > 16 || ++examined > 20000) throw new Error('目录层级或数量过大，请缩小 Mod 根目录范围。');
@@ -106,9 +110,13 @@ export class ModService {
   async dependencyCheck(game:GameId,request:DependencyRequest){const library=await this.scan(game);const config=await this.paths(game);return this.dependencies.plan(library,await installedVersions(game,config.xxmiRoot),this.projectRequest(library,request));}
   private projectRequest(library:LibrarySnapshot,request:DependencyRequest){const states={...request.states};for(const group of library.exclusiveGroups){const chosen=group.modIds.filter(id=>states[id]===true);if(chosen.length===1)for(const id of group.modIds)if(id!==chosen[0]&&library.mods.some(m=>m.id===id))states[id]=false;}return {...request,states};}
   async readonlyDependencyPlan(game:GameId,library:LibrarySnapshot,request:DependencyRequest,xxmiRoot?:string){const config=await this.paths(game);return new Dependencies().plan(library,await installedVersions(game,xxmiRoot??config.xxmiRoot),this.projectRequest(library,request));}
+  async previewStates(game:GameId,library:LibrarySnapshot,request:DependencyRequest){const config=await this.paths(game);return this.dependencies.plan(library,await installedVersions(game,config.xxmiRoot),this.projectRequest(library,request));}
   async checkedStates(game:GameId,library:LibrarySnapshot,request:DependencyRequest,confirmation?:DependencyConfirmation,xxmiRoot?:string){const config=await this.paths(game);return this.dependencies.check(library,await installedVersions(game,xxmiRoot??config.xxmiRoot),this.projectRequest(library,request),confirmation);}
   async writeRegistry(game:GameId,data:LibraryData){await this.save(game,data);}
   async restoredProjection(game:GameId,data:LibraryData){validateRestoreRegistry(data);const library=await this.readonlyScan(game);return {...library,exclusiveGroups:data.exclusiveGroups||[],mods:Object.values(data.records).filter(record=>!record.deleted).map(record=>{containedPath(data.root,record.relativePath);record.metadata=validateMetadata(record.metadata);if(record.favorite!==undefined&&typeof record.favorite!=='boolean')throw new Error('备份收藏数据无效。');if(record.tags!==undefined)record.tags=normalizeTags(record.tags);const parts=record.relativePath.split(path.sep),ownDisabled=disabled(parts.at(-1)!);return {id:record.id,name:clean(parts.at(-1)!),relativePath:record.relativePath,metadata:record.metadata,provenance:readProvenance(record.provenance),requirements:record.requirements?readRequirements(record.requirements):undefined,contentRevision:record.contentRevision,enabled:!ownDisabled&&!parts.slice(0,-1).some(disabled)&&!disabled(path.basename(data.root)),ownDisabled,disabledAncestors:parts.slice(0,-1).filter(disabled),hasCover:false,iniCount:0};})};}
+  private importPlanner?:ImportPlanner;
+  get imports(){return this.importPlanner??=new ImportPlanner(this.dataDirectory,this,this.paths);}
+  async pending(game:GameId){return this.operations.list(game);}
   private images=new ImageCache();
   private snapshots=new Map<GameId,{data:string;library:LibrarySnapshot}>();
   private operations:FileOperations;
@@ -158,7 +166,7 @@ export class ModService {
     let iniCount = 0;
     const count = async (folder: string,files=entries,depth=0) => { if(budget&&depth>32)throw new Error('只读目录深度超出预算。');for (const entry of files) {if(budget){budget.signal?.throwIfAborted();if(++budget.nodes>200000)throw new Error('只读文件数量超出预算。');} if (entry.isFile() && modIni(entry.name)) iniCount++; if (entry.isDirectory() && !entry.isSymbolicLink()) await count(path.join(folder, entry.name),await fs.readdir(path.join(folder,entry.name),{withFileTypes:true}),depth+1); } }; await count(directory);
     if (!record.cover && covers) record.cover = covers;
-    record.contentRevision??=randomUUID();
+    if(!budget)record.contentRevision??=randomUUID();
     return { id:record.id, name:clean(parts.at(-1)!), relativePath:record.relativePath, metadata:record.metadata,provenance:readProvenance(record.provenance), ...(record.remote?{remote:readRemoteInfo(record.remote)}:{}),favorite:record.favorite||false,tags:record.tags||[],contentRevision:record.contentRevision,requirements:record.requirements, enabled:!ownDisabled && !disabledAncestors.length, ownDisabled, disabledAncestors, hasCover:!!record.cover && await present(containedPath(directory, record.cover)), iniCount };
   }
   async readonlyContext(game:GameId,id?:string){const data=await this.load(game,true);return {data,...(id?await this.resolve(data,id):{record:undefined,directory:data.root})};}
@@ -289,29 +297,28 @@ export class ModService {
   }
   async deleteExclusiveGroup(game:GameId,id:string):Promise<LibrarySnapshot>{const data=await this.load(game);if(typeof id!=='string'||!data.exclusiveGroups?.some(group=>group.id===id))throw new Error('互斥组不存在，请重新读取。');data.exclusiveGroups=data.exclusiveGroups.filter(group=>group.id!==id);await this.save(game,data);return this.scan(game);}
   async sourceUrl(game:GameId,id:string):Promise<string>{const {record}=await this.context(game,id);const url=readProvenance(record!.provenance).sourceUrl;if(!url)throw new Error('尚未保存该 Mod 的来源地址。');return url;}
-  async import(game: GameId, sources: string[]): Promise<ImportResult> {
-    const data=await this.load(game); const ids:string[]=[]; const errors:string[]=[];
-    for(const source of sources) {
-      let temporary='';
-      try {
-        await assertNoLinks(source);const stat=await fs.stat(source);
-        if(relation(data.root,source)||relation(source,data.root))throw new Error('来源与已管理目录重叠，不能重复导入。');
-        let input=source,sourceName=path.basename(source,path.extname(source));
-        if(stat.isFile()){const parent=path.join(this.dataDirectory,'imports');await fs.mkdir(parent,{recursive:true});temporary=await fs.mkdtemp(path.join(parent,'archive-'));await extractModArchive(source,temporary);input=temporary;}
-        else if(!stat.isDirectory())throw new Error('来源不是目录或受支持压缩包。');else sourceName=path.basename(source);
-        let candidates=await discover(input);if((await fs.readdir(input,{withFileTypes:true})).some(entry=>entry.isFile()&&modIni(entry.name)))candidates=[''];
-        if(!candidates.length)throw new Error('没有发现包含 INI 的 Mod。');
-        for(const candidate of candidates){
-          const name=safeName(candidate?path.basename(candidate):sourceName),destination=path.join(data.root,name),id=randomUUID();
-          if(await present(destination)){errors.push(name+'：目标已有同名目录，原内容保持。');continue;}
-          data.records[id]={id,relativePath:name,metadata:inferred(game,candidate||name,data.groups.category),provenance:emptyProvenance(new Date().toISOString())};
-          try{await this.commit(game,data,'导入 '+name,[{kind:'swap',target:destination,source:candidate?path.join(input,candidate):input,newOnly:true}]);ids.push(id);}
-          catch(error){delete data.records[id];errors.push(name+'：'+(error as Error).message);if((await this.operations.list(game)).some(item=>item.kind==='interrupted'))break;}
-        }
-      }catch(error){errors.push(path.basename(source)+'：'+(error as Error).message);}
-      finally{if(temporary){await assertNoLinks(temporary);await fs.rm(temporary,{recursive:true}).catch(()=>{});}}
-    }
-    return {library:await this.scan(game),importedIds:ids,errors,canceled:false};
+  async import(game:GameId,sources:string[],_disabledByDefault=true):Promise<ImportResult>{
+    try{const preview=await this.imports.prepareLocal(game,sources);
+      try{return await this.imports.commit(game,preview.token,false);}finally{await this.imports.discard(game,preview.sessionId);}
+    }catch(error){return {library:await this.scan(game),importedIds:[],errors:(error as Error).message.split('\n'),canceled:false};}
+  }
+  async importLayout(game:GameId,candidates:string[],sourceName:string,binding?:GameBananaDownload){
+    const snapshot=await this.readonlyScan(game),root=(await this.paths(game)).modsDirectory;
+    return this.downloadPlan(game,root,candidates,binding||{metadata:metadata(),remote:{title:sourceName,fileName:sourceName}},snapshot);
+  }
+  async commitPreparedImport(game:GameId,input:{root:string;source:string;folder:string;name:string;hash:ModTreeHash;entryPath:string;binding?:GameBananaDownload},validate:()=>Promise<void>){
+    const data=await this.load(game);if(path.resolve(data.root).toLowerCase()!==path.resolve(input.root).toLowerCase())throw new ModDirectoryChangedError();
+    const expected=await optionalDigest(this.file(game)),name=safeName(input.name),folder=input.folder;
+    const destination=containedPath(data.root,path.join(folder,'DISABLED_'+name)),enabled=containedPath(data.root,path.join(folder,name));
+    await assertNoLinks(destination);if(await present(destination)||await present(enabled))throw new Error('目标已有同名 Mod，原内容保持。');
+    const id=randomUUID(),relativePath=path.relative(data.root,destination),binding=input.binding;
+    for(const record of Object.values(data.records))if(!record.deleted&&[relativePath,path.relative(data.root,enabled)].some(p=>record.relativePath.toLowerCase()===p.toLowerCase()))record.deleted='missing-reimport:'+id;
+    const labels=inferred(game,path.join(folder,name),data.groups.category);if(folder){const parts=folder.split(/[\\/]/).map(clean),index=parts.findIndex(part=>!!this.characterFor(game,part));if(index>=0){labels.category=index?parts.slice(0,index).join(' · '):binding?.metadata.category||'角色';labels.character=this.characterFor(game,parts[index]);labels.appearance=parts.slice(index+1).join(' · ');}}
+    data.records[id]={id,relativePath,contentRevision:randomUUID(),metadata:validateMetadata({...inferred(game,input.entryPath||name,data.groups.category),...(binding?.metadata||{}),...(folder?{category:labels.category,character:labels.character,appearance:labels.appearance}:{})}),provenance:{...emptyProvenance(new Date().toISOString()),...(binding?{sourceUrl:`https://gamebanana.com/mods/${binding.remote.modId}`,version:binding.version}:{})},...(binding?{remote:{...binding.remote,entryPath:input.entryPath}}:{})};
+    await this.operations.run(game,data.root,'导入 '+name,[{kind:'swap',source:input.source,target:destination,newOnly:true}],[{target:this.file(game),bytes:JSON.stringify(data,null,2),expected}],undefined,undefined,async incoming=>{
+      await validate();if(await present(enabled))throw new Error('安装目标在准备期间出现同名内容，未覆盖。');
+      const actual=await hashModTree(incoming[0]);if(actual.hash.sha256!==input.hash.sha256)throw new Error('导入副本与已确认内容不一致，未提交。');
+    });this.snapshots.delete(game);return id;
   }
   private async unpackDownload(game:GameId,file:string,root:string,input:GameBananaDownload) {
     const binding=readDownloadBinding(input,game);
@@ -339,7 +346,7 @@ export class ModService {
     for(const character of chinese.filter(name=>!chinese.some(other=>other!==name&&other.includes(name))))matches.add(character);
     return matches.size===1?[...matches][0]:'';
   }
-  private async downloadPlan(game:GameId,root:string,candidates:string[],binding:GameBananaDownload,snapshot:LibrarySnapshot):Promise<ModDownloadInstallPlan> {
+  private async downloadPlan(game:GameId,root:string,candidates:string[],binding:{metadata:Partial<ModMetadata>;remote:{fileName:string;title:string}},snapshot:LibrarySnapshot):Promise<ModDownloadInstallPlan> {
     const folders=[''];let examined=0;
     const walk=async(folder:string,depth:number)=>{
       if(depth>16||++examined>20000)throw new Error('分类目录过多或过深，请整理 Mod 目录。');
@@ -369,54 +376,12 @@ export class ModService {
     try{return await this.downloadPlan(game,root,work.candidates,work.binding,await this.scan(game));}
     finally{await fs.rm(work.unpacked,{recursive:true}).catch(()=>{});}
   }
-  async installDownload(game:GameId,file:string,root:string,input:GameBananaDownload,destinations?:ModInstallDestination[]):Promise<ImportResult&{items:ModDownloadInstallItem[]}> {
-    const {unpacked,candidates,binding}=await this.unpackDownload(game,file,root,input);const items:ModDownloadInstallItem[]=[];const ids:string[]=[];
-    try {
-      const snapshot=await this.scan(game);const live=new Set(snapshot.mods.map(mod=>mod.id));
-      const plan=await this.downloadPlan(game,root,candidates,binding,snapshot);
-      const selected=destinations===undefined?plan.items:destinations;
-      if(!Array.isArray(selected)||selected.length!==candidates.length||new Set(selected.map(item=>item?.entryPath)).size!==candidates.length||selected.some(item=>!item||typeof item.entryPath!=='string'||!plan.items.some(row=>row.entryPath===item.entryPath)||typeof item.folder!=='string'))throw new Error('安装文件夹选择与压缩包条目不匹配，请重新选择。');
-      const folders=new Map(selected.map(item=>{
-        if(path.isAbsolute(item.folder)||item.folder.length>4096)throw new Error('安装文件夹必须位于已保存的 Mod 目录内。');
-        const folder=item.folder?item.folder.split(/[\\/]/).map(part=>safeName(part)).join(path.sep):'';
-        if(folder.split(path.sep).some(part=>part.startsWith('.')||resourceNames.has(clean(part).toLowerCase())))throw new Error('请选择可管理的角色或分类文件夹，不能安装到隐藏目录或资源目录。');
-        if(folder&&snapshot.mods.some(mod=>relation(containedPath(root,mod.relativePath),containedPath(root,folder))))throw new Error('不能把 Mod 安装到另一个 Mod 的内部，请选择角色或分类文件夹。');
-        return [item.entryPath,folder];
-      }));
-      // Scan can discover external entries; use its latest registry before committing new records.
-      const latest=await this.load(game);
-      for(const candidate of candidates){
-        const entryPath=candidate.replaceAll('\\','/');let name=candidate?clean(path.basename(candidate)):clean(path.basename(binding.remote.fileName,path.extname(binding.remote.fileName)));
-        let staging='';let stagingOwned=false;let destination='';let committed=false;let id='';
-        try {
-          name=safeName(name);
-          const existing=Object.values(latest.records).find(record=>live.has(record.id)&&record.remote?.modId===binding.remote.modId&&record.remote.fileId===binding.remote.fileId&&record.remote.entryPath===entryPath);
-          if(existing){items.push({id:existing.id,name,ok:true,existing:true});continue;}
-          const folder=folders.get(entryPath)!;const parent=folder?containedPath(latest.root,folder):latest.root;
-          await assertNoLinks(parent);
-          destination=containedPath(latest.root,path.join(folder,`DISABLED_${name}`));const enabled=containedPath(latest.root,path.join(folder,name));
-          await assertNoLinks(destination);await assertNoLinks(enabled);
-          if(await present(destination)||await present(enabled))throw new Error('目标已有同名 Mod，原内容保持，请改名或使用替换功能。');
-          const labels=folder?inferred(game,path.join(folder,name),latest.groups.category):undefined;
-          if(labels){const parts=folder.split(path.sep).map(clean);const index=parts.findIndex(part=>!!this.characterFor(game,part));if(index>=0){labels.category=index?parts.slice(0,index).join(' · '):binding.metadata.category||'角色';labels.character=this.characterFor(game,parts[index]);labels.appearance=parts.slice(index+1).join(' · ');}}
-          const metadataValue=validateMetadata({...inferred(game,candidate||name,latest.groups.category),...binding.metadata,...(labels?{category:labels.category,character:labels.character,appearance:labels.appearance}:{})});
-          staging=containedPath(path.dirname(latest.root),`.kmm-import-${randomUUID()}`);await assertNoLinks(staging);await fs.mkdir(staging);stagingOwned=true;
-          const payload=path.join(staging,'payload');await copyDirectory(candidate?containedPath(unpacked,candidate):unpacked,payload);
-          // Windows directory rename refuses an existing destination; all content is prepared first.
-          await fs.mkdir(parent,{recursive:true});await assertNoLinks(parent);
-          if(await present(destination)||await present(enabled))throw new Error('安装目标在准备期间出现同名内容，未覆盖。');
-          id=randomUUID();
-          latest.records[id]={id,relativePath:path.relative(latest.root,destination),metadata:metadataValue,provenance:{...emptyProvenance(new Date().toISOString()),sourceUrl:`https://gamebanana.com/mods/${binding.remote.modId}`,version:binding.version},remote:{...binding.remote,entryPath}};
-          await this.commit(game,latest,'安装 '+name,[{kind:'swap',target:destination,source:payload,newOnly:true}]);committed=true;ids.push(id);live.add(id);items.push({id,name,ok:true});
-        }catch(error){
-          let message=(error as Error).message;
-          if(id)delete latest.records[id];
-          if(committed){try{await assertNoLinks(destination);await fs.rm(destination,{recursive:true});}catch{message+=` 新内容未能撤回，请检查：${destination}`;}}
-          items.push({name,ok:false,error:message});
-        }finally{if(stagingOwned)await fs.rm(staging,{recursive:true}).catch(()=>{});}
-      }
-      return {library:await this.scan(game),importedIds:ids,errors:items.filter(item=>!item.ok).map(item=>`${item.name}：${item.error}`),canceled:false,items};
-    }finally{await fs.rm(unpacked,{recursive:true}).catch(()=>{});}
+  async installDownload(game:GameId,file:string,root:string,input:GameBananaDownload,destinations?:ModInstallDestination[]):Promise<ImportResult&{items:ModDownloadInstallItem[]}>{
+    let preview=await this.imports.prepareDownload(game,{file,root,binding:input});
+    try{
+      if(destinations){if(!Array.isArray(destinations)||!destinations.length||new Set(destinations.map(d=>d.entryPath)).size!==destinations.length||destinations.some(d=>!preview.items.some(i=>i.entryPath===d.entryPath)))throw new Error('安装条目选择不匹配，请重新预检。');preview=await this.imports.revise(game,preview.sessionId,preview.items.map(item=>({...item,selected:destinations.some(d=>d.entryPath===item.entryPath),folder:destinations.find(d=>d.entryPath===item.entryPath)?.folder??item.folder})));}
+      return await this.imports.commit(game,preview.token,false);
+    }finally{await this.imports.discard(game,preview.sessionId);}
   }
   async delete(game:GameId,id:string,confirmation?:DependencyConfirmation):Promise<LibrarySnapshot> {
     const snapshot=await this.scan(game);const checked=await this.checkedStates(game,snapshot,{deleteId:id},confirmation);let current=snapshot;for(const dependent of dependencyOrder(snapshot,checked.states).filter(key=>key!==id))current=await this.operate(game,dependent,{kind:'toggle',enabled:false},current);

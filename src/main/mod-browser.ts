@@ -104,6 +104,10 @@ export class ModBrowser {
  }
  fetch=(url:Parameters<typeof fetch>[0],options?:Parameters<typeof fetch>[1])=>this.browserSession.fetch(url instanceof URL?url.href:typeof url==='string'?url:url.url,options);
  queueUpdate(binding:import('./gamebanana').GameBananaDownload,target:ModUpdateTarget){if(this.retries.has(binding.remote.downloadUrl))throw new Error('此文件已经等待下载事件。');const view=this.createView();this.retries.set(binding.remote.downloadUrl,{modId:binding.remote.modId,gameId:binding.gameId,target});view.webContents.downloadURL(binding.remote.downloadUrl);return this.status();}
+ importSource(id:string){return this.downloads.importSource(id);}
+ beginImport(id:string){return this.downloads.beginImport(id);}
+ failImport(id:string,message:string){return this.downloads.failImport(id,message);}
+ recordImport(id:string,result:import('../shared/import-workflows').ImportReceipt){return this.downloads.recordImport(id,result);}
  installPlan(id:string){return this.downloads.installPlan(id);}
  async downloadAction(id:string,action:ModDownloadAction,destinations?:ModInstallDestination[]){await this.downloads.action(id,action,destinations);return this.status();}
  private onDownload=(event:Event,item:DownloadItem,contents:WebContents)=>{
