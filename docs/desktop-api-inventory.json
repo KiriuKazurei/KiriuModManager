@@ -524,7 +524,7 @@
       "consumers": [
         {
           "file": "src/renderer/theme.tsx",
-          "line": 15
+          "line": 18
         }
       ],
       "status": "connected"
