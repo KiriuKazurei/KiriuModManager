@@ -6,19 +6,20 @@ import {createFixTask} from './tasks';
 import type {Config, Context} from './types';
 import type {Runner} from './runner';
 import path from 'node:path';
+import {runProcessCompatibility} from './process-runner';
 
 interface WatchEntry {runKey: string; observationKey: string; verdict: string; reportFile: string; waitingObservation?: string; lastCompatible?: {runKey: string; reportFile: string}}
-export async function watch(config: Config, runner: Runner, options: {signal?: AbortSignal; once?: boolean; onResult?: (result: unknown) => void; probe?: typeof stableContext} = {}) {
+export async function watch(config: Config, runner: Runner, options: {signal?: AbortSignal; once?: boolean; onResult?: (result: unknown) => void; probe?: typeof stableContext;processMode?:boolean;game?:GameId} = {}) {
   return withLock('watch', async () => {
     let state: Partial<Record<GameId, WatchEntry>> = {};
-    const stateFile = outputPath('watch-state-' + sha(config.machineProfile).slice(0, 16) + '.json');
+    const stateFile = outputPath('watch-state-' +(options.processMode?'process-':'')+ sha(config.machineProfile).slice(0, 16) + '.json');
     try { state = await readJson(stateFile) as typeof state; }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     let count = 0, exitCode = 0;
     do {
       exitCode = 0;
       for (const game of ['zzz', 'endfield'] as const) {
-        if (!config.games[game] || options.signal?.aborted) continue;
+        if (!config.games[game] || options.signal?.aborted||options.game&&options.game!==game) continue;
         let context: Context;
         try { context = await (options.probe ?? stableContext)(config, game, options.signal); }
         catch (error) { if (options.signal?.aborted) break; exitCode = 2; options.onResult?.({game, verdict: 'inconclusive', message: (error as Error).message}); continue; }
@@ -36,6 +37,13 @@ export async function watch(config: Config, runner: Runner, options: {signal?: A
         if (previous?.runKey === context.runKey && (previous.verdict === 'compatible' || previous.observationKey === context.observationKey)) {
           exitCode = Math.max(exitCode, previous.verdict === 'compatible' ? 0 : previous.verdict === 'incompatible' ? 1 : 2);
           continue;
+        }
+        if(options.processMode){
+          const result=await runProcessCompatibility(config,game,true,options.signal??new AbortController().signal);
+          if(!result.evidence||result.runKey!==context.runKey||result.observationKey!==context.observationKey) {exitCode=2;options.onResult?.({game,verdict:'inconclusive',report:result.directory});continue;}
+          const verdict=result.evidence.verdict==='passed'?'compatible':result.evidence.verdict==='failed'?'incompatible':'inconclusive',reportFile=path.join(result.directory,'process-report.json');
+          state[game]={runKey:context.runKey,observationKey:context.observationKey,verdict,reportFile,lastCompatible:verdict==='compatible'?{runKey:context.runKey,reportFile}:previous?.lastCompatible};await saveJson(stateFile,state);count++;exitCode=Math.max(exitCode,result.exitCode);
+          if(verdict!=='compatible')options.onResult?.({game,verdict,scope:'restart-recovery',report:reportFile});continue;
         }
         const {report, directory} = await runner.run(config, game, 'full', {signal: options.signal, probe: options.probe});
         if (report.context.runKey !== context.runKey || report.context.observationKey !== context.observationKey || report.endRunKey !== context.runKey) {exitCode = 2; continue;}

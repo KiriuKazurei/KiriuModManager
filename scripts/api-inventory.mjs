@@ -21,6 +21,8 @@ export function inspectRuntimeIPC(main,preload){
 
 // Business semantics are reviewed metadata, paired with AST-derived actual signatures/registrations.
 const semantics={
+  compatibilityStatus:['none','unknown / stale / inconclusive','Main-window queued read-only saved game/XXMI and compiled manager fingerprint; locally imported process-only evidence, never Mod verification or game rendering proof'],
+  importCompatibilityEvidence:['value:null','invalid schema/digest/game rejects','Native local JSON chooser; bounded scope/check/digest validation, atomic per-game local record; read-only environment check, no process launch or network trust claim'],
   checkGameEnvironment:['none','incomplete candidates / unknown issues','Main-window saved paths; quick known-file checks or bounded cancelable discovery job; no configuration writes'],
   chooseGameInstallation:['value:null','incomplete candidates / unknown issues','Main-window native directory chooser; same bounded discovery; no arbitrary EXE or automatic save'],
   prepareEnvironmentRepair:['none','unsupported schema rejects','Owned expiring report/candidate or repair ID; whitelist save/sync-game/sync-mods preview; public values only, Mod root retained'],

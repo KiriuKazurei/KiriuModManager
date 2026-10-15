@@ -113,6 +113,11 @@ test('SDK pending recovery is detected across games and only the exact owned san
   await journal.write('probe', Buffer.from('owned')); assert.ok((await pendingRecovery()).includes(journal.root));
   await assert.rejects(RecoveryJournal.create(run));
   assert.equal((await (await RecoveryJournal.open(journal.root)).restore()).complete, true); assert.ok(!(await pendingRecovery()).includes(journal.root));
+  const report=path.join(run,'process-report.json'),processJournal=path.join(run,'process-'+randomUUID()+'.json');
+  await fs.writeFile(report,JSON.stringify({scope:'restart-recovery',recoveryComplete:true}));
+  await fs.writeFile(processJournal,JSON.stringify({kind:'kmm-process-job',phase:'pending'}));
+  const pending=await pendingRecovery();assert.ok(pending.includes(processJournal));assert.ok(!pending.includes(report));
+  await fs.writeFile(processJournal,JSON.stringify({kind:'kmm-process-job',phase:'complete'}));assert.ok(!(await pendingRecovery()).includes(processJournal));
 });
 test('SDK execution lock prevents simultaneous owners without deleting another owner lock', async () => {
   let release!: () => void; const pending = new Promise<void>(r => release = r); const name = 'unit-' + randomUUID();

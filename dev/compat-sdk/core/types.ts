@@ -1,6 +1,6 @@
 import type {GameId} from '../../../src/shared/contracts';
 
-export const SDK_VERSION = '0.1.0';
+export const SDK_VERSION = '0.2.0';
 export const LAYERS = ['L0', 'L1', 'L2', 'L3', 'L4'] as const;
 export type Layer = typeof LAYERS[number];
 export type Verdict = 'compatible' | 'incompatible' | 'inconclusive';

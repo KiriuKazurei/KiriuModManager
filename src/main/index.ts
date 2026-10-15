@@ -1,4 +1,5 @@
 import {GameEnvironmentService} from './environment';
+import {CompatibilityService} from './compatibility';
 import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent, net, shell, Tray, Menu, nativeImage } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -49,6 +50,7 @@ app.whenReady().then(async () => {
   const business=new BusinessService(app.getPath('userData'),mods,store);
   const inspections=new Inspections(app.getPath('userData'),store,mods,business,app.getVersion());
   const environment=new GameEnvironmentService(app.getPath('userData'),store,inspections.jobs);
+  const compatibility=new CompatibilityService(app.getPath('userData'),app.getAppPath(),app.getVersion(),async game=>(await store.read()).games[game]);
   const presetManifests=new PresetManifests(app.getPath('userData'),mods,business,store);
   await mods.imports.initialize();
   const ini=new IniService(mods,business.recovery);
@@ -88,6 +90,7 @@ app.whenReady().then(async () => {
       const sender=[window,floatingWindow].find(target=>target&&!target.isDestroyed()&&event.sender===target.webContents);
       if (!sender || event.senderFrame !== sender.webContents.mainFrame || documentUrl(event.senderFrame.url)!==trustedDocuments.get(sender)) return { ok: false, error: '此页面无权访问桌面接口。' };
       if(channel.startsWith('environment:')&&sender!==window)return {ok:false,error:'请在主窗口检查和修复游戏环境。'};
+      if(channel.startsWith('compatibility:')&&sender!==window)return {ok:false,error:'请在主窗口查看兼容测试记录。'};
       if((channel.startsWith('mod-import:')||channel==='mods:import')&&sender!==window)return {ok:false,error:'请在主窗口使用导入预检。'};
       if(channel==='desktop:window-theme'&&sender!==window)return {ok:false,error:'请在主窗口设置标题栏主题。'};
       if((channel.startsWith('preset-manifest:')||['presets:preview','presets:commit','presets:apply'].includes(channel))&&sender!==window)return {ok:false,error:'请在主窗口使用预设预览与清单。'};
@@ -108,6 +111,8 @@ app.whenReady().then(async () => {
     });
   };
   handle('environment:check',(game,mode)=>environment.start(game,mode));
+  handle('compatibility:status',game=>compatibility.read(game));
+  handle('compatibility:import',async game=>{if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏');const choice=await dialog.showOpenDialog(window!,{title:'导入 SDK 进程兼容记录',properties:['openFile'],filters:[{name:'SDK 兼容记录',extensions:['json']}]});return choice.canceled||!choice.filePaths[0]?null:compatibility.import(game,choice.filePaths[0]);});
   handle('environment:choose',async(game,kind)=>{if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');if(!['game','loader'].includes(kind))throw new Error('安装位置类型无效。');const choice=await dialog.showOpenDialog(window!,{title:kind==='game'?'选择游戏安装目录':'选择 XXMI 外层安装根',properties:['openDirectory']});return choice.canceled||!choice.filePaths[0]?null:environment.start(game,'discover',{kind,directory:choice.filePaths[0]});});
   handle('environment:prepare',(game,request)=>environment.prepare(game,request));
   handle('environment:apply',async(game,token)=>{const plan=environment.readPlan(game,token);const answer=await dialog.showMessageBox(window!,{type:'warning',title:plan.action==='rollback'?'确认回退环境修复':'确认游戏路径修复',message:plan.action==='rollback'?'回退此记录中的环境改动？':'提交已预览的路径修复？',detail:[GAMES[game].name,...plan.changes.map(c=>c.role+'：'+c.before+' → '+c.after),...plan.warnings].join('\n').slice(0,16000),buttons:['取消','确认提交'],defaultId:0,cancelId:0});if(answer.response!==1)return null;try{return await environment.apply(game,token);}finally{inspections.jobs.invalidate(game);await broadcast(true);}});

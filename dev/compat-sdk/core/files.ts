@@ -87,7 +87,9 @@ export async function saveJson(file: string, value: unknown, exclusive = false) 
   const tmp = file + '.' + randomUUID() + '.tmp';
   try {
     await fs.writeFile(tmp, JSON.stringify(value, null, 2) + '\n', {flag: 'wx'});
-    await fs.rename(tmp, file);
+    for(let attempt=0;;attempt++){
+      try{await fs.rename(tmp,file);break;}catch(error){if(process.platform!=='win32'||attempt>=7||!['EPERM','EACCES','EBUSY'].includes((error as NodeJS.ErrnoException).code||''))throw error;await new Promise(resolve=>setTimeout(resolve,25*(attempt+1)));}
+    }
   } finally { await fs.rm(tmp, {force: true}); }
 }
 
@@ -95,4 +97,14 @@ export async function withLock<T>(name: string, work: () => Promise<T>): Promise
   const file = outputPath('locks', name + '.json');
   await saveJson(file, {pid: process.pid, startedAt: new Date().toISOString()}, true);
   try { return await work(); } finally { await fs.unlink(file); }
+}
+
+// Only the explicit recovery command may release a lock left by a dead SDK.
+// A reused/live PID is preserved; a separate recovery lock serializes recoverers.
+export async function withRecoveryLock<T>(work:()=>Promise<T>,name='execution'):Promise<T>{
+ return withLock('recover-'+name,async()=>{
+  const file=outputPath('locks',name+'.json');
+  try{const before=await fs.readFile(file,'utf8'),owner=await readJson(file) as {pid:number};if(!Number.isInteger(owner.pid)||owner.pid<1)throw new Error('锁的所有权无效，未移除');let dead=false;try{process.kill(owner.pid,0);}catch(error){if((error as NodeJS.ErrnoException).code==='ESRCH')dead=true;else throw error;}if(!dead)throw new Error('SDK 执行进程仍在运行，不能接管恢复');if(await fs.readFile(file,'utf8')!==before)throw new Error('执行锁已变化');await fs.unlink(file);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+  return withLock(name,work);
+ });
 }

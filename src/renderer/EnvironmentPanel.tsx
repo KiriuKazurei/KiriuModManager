@@ -3,6 +3,7 @@ import type {GameId,Settings} from '../shared/contracts';
 import type {EnvironmentRepairPreview,EnvironmentRepairRequest,EnvironmentScope} from '../shared/environment';
 import {InspectionProgress,useInspectionJob} from './InspectionJob';
 import {unwrap} from './ui';
+import {CompatibilityPanel} from './CompatibilityPanel';
 const states={healthy:'路径检查通过','change-detected':'发现路径差异','needs-selection':'请选择候选',transient:'有修复等待处理',unavailable:'未确认游戏位置',unknown:'需要进一步检查'};
 const scopes={save:'仅保存验证路径','sync-game':'保存并同步 Launcher 游戏路径','sync-mods':'同时修复静态 Mod 读取规则'};
 export function EnvironmentPanel({gameId,hidden,onBusy,onSaved}:{gameId:GameId;hidden:boolean;onBusy:(busy:boolean)=>void;onSaved:(settings:Settings)=>void}){
@@ -19,7 +20,7 @@ export function EnvironmentPanel({gameId,hidden,onBusy,onSaved}:{gameId:GameId;h
  async function prepare(request:EnvironmentRepairRequest){await action(async()=>setPreview(unwrap(await window.kmm.prepareEnvironmentRepair(gameId,request))));}
  async function choose(kind:'game'|'loader'){setPreview(null);setCandidate('');reader.clear();await reader.start(()=>window.kmm.chooseGameInstallation(gameId,kind));}
  async function apply(){if(!preview)return;const token=preview.token;await action(async()=>{const result=unwrap(await window.kmm.applyEnvironmentRepair(gameId,token));if(!result){setMessage('已取消提交，可继续检查预览。');return;}onSaved(result.settings);setPreview(null);setMessage(result.repair.message+(result.warnings.length?' '+result.warnings.join('；'):''));await reader.start(()=>window.kmm.checkGameEnvironment(gameId,'discover'));});}
- return <section className="card environment-panel" aria-label="游戏环境" hidden={hidden} data-preview-token={preview?.token??''}>
+ return <><CompatibilityPanel key={gameId} gameId={gameId} hidden={hidden}/><section className="card environment-panel" aria-label="游戏环境" hidden={hidden} data-preview-token={preview?.token??''}>
   <h2>游戏环境</h2><p>检查已保存的路径，先预览，再确认修复。游戏更新后的 Mod 兼容性仍需实际测试。</p>
   <div className="environment-actions"><button disabled={busy||reader.job?.stage==='running'} onClick={()=>void check('quick')}>轻检查</button><button disabled={busy||reader.job?.stage==='running'} onClick={()=>void check('discover')}>查找候选</button><button disabled={busy||reader.job?.stage==='running'} onClick={()=>void choose('game')}>选择游戏安装位置</button><button disabled={busy||reader.job?.stage==='running'} onClick={()=>void choose('loader')}>选择 XXMI 安装位置</button></div>
   <InspectionProgress job={reader.job} error={reader.error} onCancel={()=>void reader.cancel()}/>
@@ -31,5 +32,5 @@ export function EnvironmentPanel({gameId,hidden,onBusy,onSaved}:{gameId:GameId;h
    <details><summary>环境修复记录（{report.repairs.length}）</summary>{report.repairs.map(r=><div className="environment-record" key={r.id}><span>{new Date(r.createdAt).toLocaleString('zh-CN')} · {scopes[r.scope]} · {r.phase}<br/>{r.message}</span><button disabled={busy||r.phase==='rolled-back'} aria-label={'预览回退 '+r.id} onClick={()=>void prepare({kind:'rollback',repairId:r.id})}>预览回退</button></div>)}<button onClick={()=>void action(async()=>{unwrap(await window.kmm.revealManagedLocation(gameId,{kind:'storage',category:'environment-repairs'}));})}>查看修复副本位置</button></details>
   </>}
   {preview&&<div className="environment-preview" role="region" aria-label="环境修复预览"><h3>{preview.action==='rollback'?'回退预览':'路径修复预览'}</h3><p>{scopes[preview.scope]} · 预览两分钟内有效；最终提交仍会重新检查。</p>{preview.changes.length?<table><thead><tr><th>项目</th><th>当前值</th><th>提交后</th></tr></thead><tbody>{preview.changes.map((c,i)=><tr key={i}><th scope="row">{c.role}</th><td>{c.before||'未配置'}</td><td>{c.after||'未配置'}</td></tr>)}</tbody></table>:<p>路径值保持，提交会记录已确认的环境。</p>}<ul>{preview.warnings.map(w=><li key={w}>{w}</li>)}</ul><button disabled={busy||reader.job?.stale} onClick={()=>void apply()}>确认{preview.action==='rollback'?'回退':'路径修复'}</button><button disabled={busy} onClick={()=>setPreview(null)}>关闭预览</button></div>}
- </section>;
+ </section></>;
 }

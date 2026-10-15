@@ -34,11 +34,12 @@
 | [下载页面与手动安装](0.0.2下载页面与手动安装.md) | 后续分页、安装位置及当前验收边界 |
 | [内置浏览器与登录保存](内置浏览器与登录保存.md) | 两游戏共享浏览器、Cookie 加密保存与重启/退出登录验收 |
 | [0.0.2 实现与验收](0.0.2寻找Mod实现与验收.md) | 实际使用、任务/绑定/失败规则、源码窗口与真实网站证据 |
-| [桌面接口文档](桌面接口文档.md) | 当前 97 个异步调用逐项对应功能/实际业务效果、精确参数/结果/消费者、多操作分支及 1 个事件 |
+| [桌面接口文档](桌面接口文档.md) | 当前 99 个异步调用逐项对应功能/实际业务效果、精确参数/结果/消费者、多操作分支及 1 个事件 |
+| [进程恢复与兼容提示](进程恢复与兼容提示.md) | SDK 0.2.0 的显式进程范围、Job 恢复、记录适用性与产品入口；不包含真实游戏验收 |
 | [自动接口清单](desktop-api-inventory.json) | TypeScript compiler/AST 派生参数、结果、通道、服务与实际消费者 |
 | [XXMI 集成与部署说明](XXMI集成与部署说明.md) | 当前识别/备份同步/官方来源验证/空目录部署/运行库语义 |
 
-当前 97 个异步调用中，91 项有 renderer 消费者；旧 `saveSettings / importMods / applyPreset / conflicts / recovery / restore` 六项为 compatibility-only，事件另计一项。接口或消费者位置变化后运行 `npm.cmd run api:inventory` 并审查，再运行 `api:check`；同步桌面接口与 GUI 对接文档，不能只更新清单。旧版本文档中的接口数量仅代表对应阶段。
+当前 99 个异步调用中，93 项有 renderer 消费者；旧 `saveSettings / importMods / applyPreset / conflicts / recovery / restore` 六项为 compatibility-only，事件另计一项。接口或消费者位置变化后运行 `npm.cmd run api:inventory` 并审查，再运行 `api:check`；同步桌面接口与 GUI 对接文档，不能只更新清单。旧版本文档中的接口数量仅代表对应阶段。
 
 0.0.4 的 F01–F12 实现、回归修复和 GUI 对接资料已随 e15f958 推送远程 main；更早的 HEAD 不包含全部实现。最新 F01 门禁为 195 测试、93+1 API、构建和七组隔离源码窗口，见导入说明与进度文档；推送前另已复查 typecheck/API/build。0.0.5 同步 F13 R1–R3 的四项 API 及独立 SDK，当前为 97+1；本版实际验证见 0.0.5 说明和路径修复说明。新包/Release、真实游戏、人工体验及性能差异归因见 V01–V04，旧 release 不作为最新功能包。
 

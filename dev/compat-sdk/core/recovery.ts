@@ -87,6 +87,11 @@ export async function pendingRecovery(): Promise<string[]> {
     for (const entry of entries) {
       if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
       const sandbox = path.join(root, entry.name, 'sandbox');
+      for(const name of await fs.readdir(path.join(root,entry.name))){
+        if(!/^process-[a-f0-9-]{36}\.json$/.test(name))continue;
+        const file=path.join(root,entry.name,name);
+        try{const value=await readJson(file) as {kind:string;phase:string};if(value.kind!=='kmm-process-job'||value.phase!=='complete')result.push(file);}catch{result.push(file);}
+      }
       try {
         const journal = await readJson(path.join(sandbox, 'journal.json')) as Journal;
         if (!Array.isArray(journal.entries) || journal.entries.some(e => !e.restored)) result.push(sandbox);

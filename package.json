@@ -38,7 +38,9 @@
     "compat": "tsx dev/compat-sdk/cli/index.ts",
     "compat:typecheck": "tsc --noEmit -p dev/compat-sdk/tsconfig.json",
     "compat:verify": "tsx dev/compat-sdk/cli/verify.ts",
-    "smoke:compat-sdk": "node scripts/smoke-compat-sdk.mjs"
+    "smoke:compat-sdk": "node scripts/smoke-compat-sdk.mjs",
+    "smoke:compatibility": "node --import tsx scripts/smoke-process-compatibility.mjs",
+    "smoke:compatibility:process": "node --import tsx scripts/smoke-process-compatibility.mjs --process"
   },
   "dependencies": {
     "7zip-bin-full": "^26.4.1",

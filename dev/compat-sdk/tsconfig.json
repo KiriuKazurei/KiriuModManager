@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.main.json",
   "compilerOptions": {"rootDir": "../..", "noEmit": true},
-  "include": ["./**/*.ts", "../../tests/compat-sdk.test.ts"]
+  "include": ["./**/*.ts", "../../tests/compat-sdk.test.ts", "../../tests/compat-process.test.ts"]
 }

@@ -10,7 +10,7 @@ async function main() {
   await fs.mkdir(run, {recursive: true});
   const before = await sourceHashes();
   const checks: Record<string, {pass: boolean; log: string; digest: string; reused?: boolean; report?: string; reportDigest?: string}> = {};
-  for (const [name, script] of [['typecheck', 'typecheck'], ['sdkTypecheck', 'compat:typecheck'], ['tests', 'test'], ['api', 'api:check'], ['build', 'build'], ['window', 'smoke:environment']]) {
+  for (const [name, script] of [['typecheck', 'typecheck'], ['sdkTypecheck', 'compat:typecheck'], ['tests', 'test'], ['api', 'api:check'], ['build', 'build'], ['window', 'smoke:environment'],['compatWindow','smoke:compatibility']]) {
     const log = path.join(run, name + '.txt');
     const chunks: Buffer[] = [];
     let stdout = '';
@@ -22,12 +22,13 @@ async function main() {
     checks[name] = {pass: code === 0, log, digest: sha(bytes)};
     console.log(`${name}: ${code === 0 ? 'passed' : 'FAILED'} (${log})`);
     if (code !== 0) throw new Error(`${name} 未通过`);
-    if (name === 'window') {
+    if (name === 'window'||name==='compatWindow') {
       const summary = JSON.parse(stdout.slice(stdout.lastIndexOf('\n{') + 1).trim()) as {pass: boolean; run: string};
-      if (!summary.pass || !isInside(path.join(REPO, '.run-data/environment-smoke'), summary.run)) throw new Error('窗口结果或报告目录无效');
+      const reportRoot=name==='window'?'.run-data/environment-smoke':'.run-data/process-compatibility-smoke';
+      if (!summary.pass || !isInside(path.join(REPO, reportRoot), summary.run)) throw new Error('窗口结果或报告目录无效');
       const report = path.join(summary.run, 'report.json');
       if ((await readJson(report) as {pass?: boolean}).pass !== true) throw new Error('源码窗口报告未通过');
-      Object.assign(checks.window, {reused: false, report, reportDigest: (await hashFile(report)).digest});
+      Object.assign(checks[name], {reused: false, report, reportDigest: (await hashFile(report)).digest});
     }
   }
   const after = await sourceHashes();

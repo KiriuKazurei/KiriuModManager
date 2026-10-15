@@ -74,6 +74,8 @@ export interface AppUpdateStatus {
   lastResult?:{stage:string;message:string;backup?:string};
 }
 export interface DesktopAPI {
+  compatibilityStatus(game:GameId):Promise<Result<import('./compatibility').CompatibilityStatus>>;
+  importCompatibilityEvidence(game:GameId):Promise<Result<import('./compatibility').CompatibilityStatus|null>>;
   checkGameEnvironment(game:GameId,mode:'quick'|'discover'):Promise<Result<InspectionJob>>;
   chooseGameInstallation(game:GameId,kind:'game'|'loader'):Promise<Result<InspectionJob|null>>;
   prepareEnvironmentRepair(game:GameId,request:EnvironmentRepairRequest):Promise<Result<EnvironmentRepairPreview>>;

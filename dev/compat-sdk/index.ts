@@ -7,4 +7,6 @@ export {watch} from './core/watch';
 export {evaluateReferenceFrames} from './core/visual';
 export type {Frame, Region, ReferenceRules} from './core/visual';
 export {registerLocalSuites} from './suites/local';
+export {runProcessCompatibility} from './core/process-runner';
+export {recoverProcessJournal} from './core/processes';
 export * from './core/types';

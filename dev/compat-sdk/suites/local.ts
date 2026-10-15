@@ -9,7 +9,7 @@ export async function checkSourceGate() {
     const gate = await readJson(outputPath('source-gate.json')) as {schemaVersion: number; hashes: Record<string, string>; checks: Record<string, {pass: boolean; log: string; digest: string; report?: string; reportDigest?: string}>};
     const hashes = await sourceHashes();
     if (gate.schemaVersion !== 1 || !gate.hashes || JSON.stringify(gate.hashes) !== JSON.stringify(hashes)) throw new Error('源码/SDK/测试/工具链配置已变更，需要重跑源码门禁');
-    for (const name of ['typecheck', 'sdkTypecheck', 'tests', 'api', 'build', 'window']) {
+    for (const name of ['typecheck', 'sdkTypecheck', 'tests', 'api', 'build', 'window','compatWindow']) {
       const c = gate.checks[name];
       if (!c?.pass || !isInside(outputPath('verification'), c.log) && name !== 'window') throw new Error(`缺少可信 ${name} 记录`);
       if (sha(await fs.readFile(c.log)) !== c.digest) throw new Error(`${name} 证据摘要不符`);
