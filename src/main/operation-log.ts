@@ -4,6 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {AsyncLocalStorage} from 'node:async_hooks';
 import type {GameId} from '../shared/contracts';
 import {assertNoLinks} from './archive';
+import {ApplicationLog,logContext} from './application-log';
 
 const actions=new Set(['environment:apply','mod-import:commit','mods:operate','mods:batch','mods:exclusive-save','mods:exclusive-delete','mods:import','mods:replace','mods:delete','mods:choose-cover','mods:group','characters:choose-cover','presets:save','presets:add-members','presets:delete','presets:apply','ini:save','recovery:create','recovery:restore','mods:install-download','profiles:capture','profiles:duplicate','profiles:apply','recovery:protect','recovery:apply-restore','recovery:apply-cleanup','recovery:cleanup-job','recovery:cleanup-run','diagnostics:export','presets:commit','preset-manifest:commit','preset-manifest:replacement','preset-manifest:export']);
 const MAX_FILE_BYTES=2*1024**2,ARCHIVES=3,MAX_TARGETS=40;
@@ -45,7 +46,7 @@ function summary(action:string,args:unknown[],value:unknown){
 }
 export class OperationLog {
  private pending:Promise<void>=Promise.resolve();private warned=false;
- constructor(private directory:string){this.directory=path.resolve(directory);}
+ constructor(private directory:string,private application?:ApplicationLog){this.directory=path.resolve(directory);}
  private file(index=0){return path.join(this.directory,'logs','operations.jsonl'+(index?'.'+index:''));}
  private async append(entry:Record<string,unknown>){
   const line=JSON.stringify({version:1,time:new Date().toISOString(),...entry})+'\n',bytes=Buffer.byteLength(line);if(bytes>16*1024)throw new Error('操作日志记录过大。');
@@ -56,17 +57,20 @@ export class OperationLog {
   }
   await fs.appendFile(this.file(),separator+line,'utf8');
  }
- private write(entry:Record<string,unknown>){this.pending=this.pending.then(()=>this.append(entry)).catch(()=>{if(!this.warned){this.warned=true;console.warn('本地操作日志写入失败，请检查数据目录空间与权限。');}});return this.pending;}
- async flush(){await this.pending;}
+ private write(entry:Record<string,unknown>){if(this.application){const result=object(entry.result),failed=result.status==='failed',partial=result.status==='partial';return this.application.record('operations','operation.'+entry.phase,entry,failed?'error':partial?'warning':'info');}this.pending=this.pending.then(()=>this.append(entry)).catch(()=>{if(!this.warned){this.warned=true;console.warn('本地操作日志写入失败，请检查数据目录空间与权限。');}});return this.pending;}
+ async flush(){await this.pending;await this.application?.flush();}
  async run<T>(action:string,args:unknown[],work:()=>Promise<T>,origin:Origin='main'):Promise<T>{
-  if(!actions.has(action))return work();const gameId=args[0]==='zzz'||args[0]==='endfield'?args[0]:undefined,id=randomUUID(),ids=targets(action,args);
+  if(action==='logs:renderer'||!this.application&&!actions.has(action))return work();const gameId=args[0]==='zzz'||args[0]==='endfield'?args[0]:undefined,id=randomUUID(),ids=targets(action,args);
   const operation=object(args[2]),kind=typeof operation.kind==='string'&&['toggle','rename','metadata','provenance','classify','favorite','tags','requirements'].includes(operation.kind)?operation.kind:['folder','archive'].includes(args[action==='mods:import'?1:2] as string)?args[action==='mods:import'?1:2]:action==='mods:group'&&['category','character','appearance'].includes(args[1] as string)?args[1]:undefined;
-  const common={id,action,origin,...(gameId?{gameId}:{}),...(kind?{kind}:{}),...(typeof operation.enabled==='boolean'?{enabled:operation.enabled}:{}),...(ids.length?{targetCount:ids.length,targetIds:ids.slice(0,MAX_TARGETS)}:{})};
+  const enums=new Set(['gui','game','day','night','back','forward','reload','home','folder','archive','quick','discover','cancel','retry-download','retry-install','reread-binding','use-current-directory','show-file','markdown','json']);
+  const argumentIds=args.filter(uuid),choices=args.filter((value):value is string=>typeof value==='string'&&enums.has(value));
+  const patch=action==='settings:save-game-paths'?object(args[1]):action==='settings:save-desktop-preferences'?object(args[0]):undefined;
+  const common={id,action,origin,...(gameId?{gameId}:{}),...(kind?{kind}:{}),...(typeof operation.enabled==='boolean'?{enabled:operation.enabled}:{}),...(ids.length?{targetCount:ids.length,targetIds:ids.slice(0,MAX_TARGETS)}:{}),...(this.application?{argumentIds:argumentIds.slice(0,MAX_TARGETS),choices,...(patch?{changedFields:Object.keys(patch).filter(key=>['xxmiRoot','gameDirectory','modsDirectory','marketUrl','updateUrl','updateSourceUrl','closeToTray'].includes(key))}:{})}:{})};
   const current:Context={directory:this.directory,id,action,gameId,origin,references:new Set(),write:entry=>this.write({...common,...entry})};
-  return context.run(current,async()=>{
+  const parent=logContext.getStore();return logContext.run({operationId:id,...(parent?{parentOperationId:parent.operationId}:{}),action,gameId},()=>context.run(current,async()=>{
    await current.write({phase:'start'});const started=Date.now();
    try{const value=await work();await current.write({phase:'finish',durationMs:Date.now()-started,result:summary(action,args,value),...(current.references.size?{referenceCount:current.references.size,referenceIds:[...current.references].slice(0,MAX_TARGETS)}:{})});return value;}
-   catch(error){await current.write({phase:'finish',durationMs:Date.now()-started,result:{status:'failed',failureCategories:[category(error)]},...(current.references.size?{referenceCount:current.references.size,referenceIds:[...current.references].slice(0,MAX_TARGETS)}:{})});throw error;}
-  });
+   catch(error){await current.write({phase:'finish',durationMs:Date.now()-started,result:{status:'failed',failureCategories:[category(error)]},...(this.application?{error:this.application.error(error)}:{}),...(current.references.size?{referenceCount:current.references.size,referenceIds:[...current.references].slice(0,MAX_TARGETS)}:{})});throw error;}
+  }));
  }
 }

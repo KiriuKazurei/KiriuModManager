@@ -2,6 +2,9 @@ import type {DesktopAPI,Result} from './contracts';
 
 // Type-only correspondence: sandbox preload must not require this file at runtime.
 export interface IPCContracts {
+  'logs:report':DesktopAPI['logReport'];
+  'logs:open':DesktopAPI['openLogDirectory'];
+  'logs:renderer':DesktopAPI['reportRendererEvent'];
   'compatibility:status':DesktopAPI['compatibilityStatus'];
   'compatibility:import':DesktopAPI['importCompatibilityEvidence'];
   'environment:check':DesktopAPI['checkGameEnvironment'];

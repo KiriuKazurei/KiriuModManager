@@ -15,6 +15,7 @@ import {assertNoLinks,containedPath} from './archive';
 import {decodeIni} from './ini';
 import {fileBytes,isInside,optionalDigest,sha,INSPECTION_LIMITS} from './inspection-files';
 import {writeAtomicFile} from './atomic-json';
+import {currentApplicationLog} from './application-log';
 export class Diagnostics {
  constructor(private dataDirectory:string,private mods:ModService,private version:string){}
  async run(game:GameId,paths:GamePaths,signal:AbortSignal,progress:(message:string)=>void):Promise<DiagnosticReport>{
@@ -45,7 +46,9 @@ export class Diagnostics {
   }catch{add('mods.read','Mod 状态','unknown','库损坏、目录不可用或存在未完成操作；未迁移或写入索引。',[],'mods');}
   progress('读取待处理操作');try{const pending=await new FileOperations(this.dataDirectory).list(game);add('pending','待处理操作',pending.length?'warning':'pass',pending.length?`有 ${pending.length} 个中断或待核对记录。`:'没有文件提交中断记录。',pending.map(p=>p.id),'recovery');}catch{add('pending','待处理操作','unknown','无法确认待处理记录。',[],'recovery');}
   try{const directory=path.join(this.dataDirectory,'recovery-cleanup');await assertNoLinks(directory);const jobs=await fs.readdir(directory);let count=0;for(const id of jobs.filter(id=>/^[a-f0-9-]{36}$/.test(id))){const record=JSON.parse((await fileBytes(path.join(directory,id,'manifest.json'))).toString());if(record.gameId===game&&!['complete','undone'].includes(record.phase))count++;}add('cleanup','待处理操作',count?'warning':'pass',`待确认清理任务 ${count} 项。`,[],'recovery');}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')add('cleanup','待处理操作','unknown','清理记录无法完整读取。',[],'recovery');}
-  try{const bytes=await fileBytes(path.join(this.dataDirectory,'logs','operations.jsonl'),2*1024**2);const rows=diagnosticLogRows(bytes.toString(),game);const failure=rows.filter(row=>row.status==='failed').length;add('logs','操作摘要',failure?'warning':'pass',`最近最多 100 条记录中，本游戏失败 ${failure} 项。`);for(const [index,row]of rows.entries())add('log.'+index,'操作摘要',row.status==='failed'||row.status==='partial'?'warning':'pass',row.action+' · '+row.status,[row.time,row.id,...row.referenceIds,...row.failureCategories]);}catch{add('logs','操作摘要','skipped','没有可读取的本地操作摘要。');}
+  try{const runtime=currentApplicationLog();let contents='';try{contents=(await fileBytes(path.join(this.dataDirectory,'logs','operations.jsonl'),2*1024**2)).toString();}catch(error){if(!runtime)throw error;}
+   if(runtime){const recent=await runtime.recentRows();contents+='\n'+recent.rows.map(row=>JSON.stringify(row)).join('\n');const analysis=await runtime.report(game);add('logs.storage','日志存储',analysis.writable&&!analysis.writeFailures?'pass':'warning',analysis.writable?`日志可写；分析范围 ${analysis.records} 条记录${analysis.truncated?'（已截断）':''}。`:'日志写入失败，部分证据可能缺失。');for(const finding of analysis.findings)add('logs.'+finding.kind,'日志分析',finding.level==='error'?'error':'warning',finding.title+'：'+finding.explanation,finding.evidence.flatMap(row=>[row.time,row.sessionId,...(row.operationId?[row.operationId]:[])]));}
+   const rows=diagnosticLogRows(contents,game),failure=rows.filter(row=>row.status==='failed').length;add('logs','操作摘要',failure?'warning':'pass',`最近最多 100 条记录中，本游戏失败 ${failure} 项。`);for(const [index,row]of rows.entries())add('log.'+index,'操作摘要',row.status==='failed'||row.status==='partial'?'warning':'pass',row.action+' · '+row.status,[row.time,row.id,...row.referenceIds,...row.failureCategories]);}catch{add('logs','操作摘要','skipped','没有可读取的本地操作摘要。');}
   return {kind:'diagnostics',gameId:game,version:this.version,observedAt:new Date().toISOString(),facts,incomplete:facts.some(f=>f.status==='unknown')};
  }
  preview(job:InspectionJob,options:ReportOptions):DiagnosticExport{

@@ -8,6 +8,7 @@ import {assertNoLinks,containedPath} from './archive';
 import {downloadFileName,gameBananaUrl,MAX_MOD_DOWNLOAD,ModDirectoryChangedError,readDownloadBinding,resolveGameBananaFile,verifyModDownload} from './gamebanana';
 import type {GameBananaDownload} from './gamebanana';
 import {writeAtomicJson} from './atomic-json';
+import {logEvent} from './application-log';
 
 interface Task {status:ModDownload;modId:number;urls:string[];binding?:GameBananaDownload;item?:DownloadItem;controller?:AbortController;running?:Promise<void>;stopped:boolean;failure?:string}
 const activeStages=['binding','downloading','verifying','installing'];
@@ -44,8 +45,8 @@ export class ModDownloads {
     if(activeStages.includes(task.status.stage)){task.status.stage='interrupted';task.status.message='上次任务已中断；完整包可重试安装，否则请重新下载。';task.status.updatedAt=new Date().toISOString();changed=true;}
     loaded.push(task);
    }
-   this.tasks=loaded;if(changed)await this.persist();
-  }catch(e){this.available=false;this.error=`无法读取下载记录，原文件已保留：${(e as Error).message}`;}
+   this.tasks=loaded;if(changed)await this.persist();await logEvent('downloads','download.records-restored',{tasks:loaded.length,interrupted:loaded.filter(task=>task.status.stage==='interrupted').length,ready:loaded.filter(task=>task.status.archiveReady).length});
+  }catch(e){this.available=false;this.error=`无法读取下载记录，原文件已保留：${(e as Error).message}`;await logEvent('downloads','download.records-unreadable',{},'error',e);}
  }
  status(){return this.tasks.map(task=>({...task.status,items:task.status.items.map(item=>({...item})),importedIds:[...task.status.importedIds]}));}
  hasActive(){return this.tasks.some(task=>!!task.running||activeStages.includes(task.status.stage));}
@@ -57,10 +58,10 @@ export class ModDownloads {
   const work=this.pending.then(()=>writeAtomicJson(file,payload));
   this.pending=work.catch(e=>{this.error=`下载任务记录保存失败：${e.message}`;});return work;
  }
- private async mark(task:Task,stage:ModDownload['stage'],message:string){task.status.stage=stage;task.status.message=message;task.status.updatedAt=new Date().toISOString();await this.persist();}
+ private async mark(task:Task,stage:ModDownload['stage'],message:string){task.status.stage=stage;task.status.message=message;task.status.updatedAt=new Date().toISOString();await this.persist();await logEvent('downloads','download.stage',{taskId:task.status.id,gameId:task.status.gameId,stage,receivedBytes:task.status.receivedBytes,totalBytes:task.status.totalBytes,archiveReady:task.status.archiveReady},stage==='error'?'error':stage==='partial'||stage==='interrupted'?'warning':'info');}
  private track(task:Task,work:()=>Promise<void>){
   if(task.running)throw new Error('该下载任务正在处理，请等待。');
-  const run=work().catch(async e=>{if(!task.stopped){task.status.stage=e instanceof ModDirectoryChangedError?'waiting-directory':'error';task.status.message=task.failure||(e as Error).message;task.status.updatedAt=new Date().toISOString();if(!task.status.archiveReady)this.cancelItem(task);await this.persist().catch(()=>{});}}).finally(()=>{task.running=undefined;});
+  const run=work().catch(async e=>{if(!task.stopped){task.status.stage=e instanceof ModDirectoryChangedError?'waiting-directory':'error';task.status.message=task.failure||(e as Error).message;task.status.updatedAt=new Date().toISOString();if(!task.status.archiveReady)this.cancelItem(task);await this.persist().catch(()=>{});await logEvent('downloads','download.failed',{taskId:task.status.id,gameId:task.status.gameId,stage:task.status.stage},e instanceof ModDirectoryChangedError?'warning':'error',e);}}).finally(()=>{task.running=undefined;});
   task.running=run;return run;
  }
  private cancelItem(task:Task){try{task.item?.cancel();}catch{/* Native item may already be disposed after completion. */}}

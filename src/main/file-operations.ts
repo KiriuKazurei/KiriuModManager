@@ -26,12 +26,13 @@ async function copy(source:string,target:string){await assertNoLinks(source);awa
 
 // A narrowly scoped directory commit, not a global transaction. Complete staged
 // content and original directory identities survive abrupt process termination.
+import {logEvent} from './application-log';
 export class FileOperations {
  constructor(private data:string){}
  private folder(){return path.join(this.data,'pending-operations');}
  private recordFile(id:string){if(!/^[a-f0-9-]{36}$/.test(id))throw new Error('中断操作身份无效。');return path.join(this.folder(),id+'.json');}
  private metaFolder(id:string){return path.join(this.folder(),id);}
- private async store(op:Operation){await writeAtomicJson(this.recordFile(op.id),JSON.stringify(op));}
+ private async store(op:Operation){await writeAtomicJson(this.recordFile(op.id),JSON.stringify(op));await logEvent('files','file-operation.checkpoint',{transactionId:op.id,gameId:op.gameId,phase:op.phase,purpose:op.purpose,steps:op.steps.length,files:op.files?.length||0});}
  private validate(op:Operation){
   if(![1,2].includes(op.version)||!Object.hasOwn(GAMES,op.gameId)||typeof op.root!=='string'||!path.isAbsolute(op.root)||same(op.root,path.parse(op.root).root)||typeof op.name!=='string'||!['preparing','applying','committed','rolled-back'].includes(op.phase)||!Array.isArray(op.steps)||(op.version===1?(!op.steps.length||op.steps.length>8):op.steps.length>5000)||!Array.isArray(op.metadata)||op.metadata.length>4)throw new Error('中断操作记录无效，原文件保留。');
   if(op.version===2&&(!['profile-switch','preset-switch','preset-import'].includes(op.purpose||'')||!Array.isArray(op.files)||op.files.length>2048||op.files.some(file=>typeof file.target!=='string'||!path.isAbsolute(file.target)||!inside(op.root,file.target)||!/^.{1,}\.ini$/i.test(path.basename(file.target))||/^desktop\.ini$/i.test(path.basename(file.target))||!/^[a-f0-9]{64}$/.test(file.before)||!/^[a-f0-9]{64}$/.test(file.after))||new Set(op.files.map(file=>file.target.toLowerCase())).size!==op.files.length))throw new Error('配置档文件操作无效。');

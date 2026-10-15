@@ -3,8 +3,12 @@ import type {GameId} from '../shared/contracts';
 import type {DiagnosticExport,DiagnosticFact} from '../shared/inspections';
 import {useInspectionJob,InspectionProgress} from './InspectionJob';
 import {unwrap} from './ui';
+import {LogsPanel} from './LogsPanel';
 const statuses:Record<DiagnosticFact['status'],string>={pass:'通过',warning:'注意',error:'问题',unknown:'未知',skipped:'跳过'};
-export function DiagnosticsPanel({gameId,onNavigate}:{gameId:GameId;onNavigate:(target:'settings'|'recovery'|'mods'|'presets')=>void}){
+export function DiagnosticsPanel(props:{gameId:GameId;onNavigate:(target:'settings'|'recovery'|'mods'|'presets'|'conflicts')=>void}){
+ return <><LogsPanel gameId={props.gameId} onNavigate={props.onNavigate}/><EnvironmentDiagnostics {...props}/></>;
+}
+function EnvironmentDiagnostics({gameId,onNavigate}:{gameId:GameId;onNavigate:(target:'settings'|'recovery'|'mods'|'presets')=>void}){
  const task=useInspectionJob(gameId),[includeNames,setIncludeNames]=useState(false),[preview,setPreview]=useState<DiagnosticExport|null>(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  const report=task.job?.result?.kind==='diagnostics'?task.job.result:null;useEffect(()=>{setPreview(null);setMessage('');},[gameId,task.job?.id,includeNames]);
  async function action(work:()=>Promise<void>){setBusy(true);task.setError('');setMessage('');try{await work();}catch(e){task.setError((e as Error).message);}finally{setBusy(false);}}

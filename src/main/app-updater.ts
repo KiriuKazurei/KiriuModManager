@@ -8,6 +8,7 @@ import { assertNoLinks, containedPath, extractZip } from './archive';
 import { validateUpdateSource } from './web-links';
 import type { AppUpdateRelease, AppUpdateStatus } from '../shared/contracts';
 import type { FetchClient } from './releases';
+import {logEvent} from './application-log';
 
 const MAX_ARCHIVE=512*1024**2;
 export function versionParts(value:unknown):number[] {
@@ -62,16 +63,17 @@ export async function resolveAppUpdate(client:FetchClient,source:string):Promise
 export async function fileHash(file:string):Promise<string> {
  const hash=createHash('sha256');for await(const bytes of createReadStream(file))hash.update(bytes);return hash.digest('hex');
 }
-export async function packageFiles(root:string):Promise<string[]> {
+export async function packageFiles(root:string,allowMods=false):Promise<string[]> {
  const files:string[]=[];
- async function walk(directory:string){await assertNoLinks(directory);for(const item of await fs.readdir(directory,{withFileTypes:true})){const target=path.join(directory,item.name);if(item.isSymbolicLink())throw new Error('程序包包含链接。');if(item.isDirectory())await walk(target);else if(item.isFile())files.push(path.relative(root,target).replaceAll('\\','/'));else throw new Error('程序包包含特殊文件。');}}
+ async function walk(directory:string){await assertNoLinks(directory);for(const item of await fs.readdir(directory,{withFileTypes:true})){const target=path.join(directory,item.name);if(item.isSymbolicLink())throw new Error('程序包包含链接。');if(directory===root&&['mods','log'].includes(item.name.toLowerCase())){if(!allowMods||!item.isDirectory())throw new Error('Mods / log 是保留的用户目录，更新包不能包含或替换它们。');await assertNoLinks(target);continue;}if(item.isDirectory())await walk(target);else if(item.isFile())files.push(path.relative(root,target).replaceAll('\\','/'));else throw new Error('程序包包含特殊文件。');}}
  await walk(root);return files.sort();
 }
-export async function validateAppPackage(root:string,version:string):Promise<void> {
+export async function validateAppPackage(root:string,version:string,allowMods=false):Promise<void> {
  await assertNoLinks(root);const manifestFile=path.join(root,'kmm-package.json');await assertNoLinks(manifestFile);
  const manifest=JSON.parse(await fs.readFile(manifestFile,'utf8'));
  if(manifest.schemaVersion!==1||manifest.product!=='kiriu-mods-manager'||manifest.platform!=='win32-x64'||manifest.version!==version||!manifest.files||typeof manifest.files!=='object'||Array.isArray(manifest.files))throw new Error('程序包身份或版本不匹配。');
- const actual=(await packageFiles(root)).filter(file=>file!=='kmm-package.json');const expected=Object.keys(manifest.files).sort();
+ const actual=(await packageFiles(root,allowMods)).filter(file=>file!=='kmm-package.json');const expected=Object.keys(manifest.files).sort();
+ if(expected.some(file=>/^(?:mods|log)(?:[\\/]|$)/i.test(file)))throw new Error('程序清单不能包含保留的 Mods / log 用户目录。');
  if(actual.length>50000||actual.length!==expected.length||actual.some((file,i)=>file!==expected[i]))throw new Error('程序目录包含清单外文件或缺少文件，请先保留个人文件再更新。');
  for(const file of expected){if(!/^[a-f0-9]{64}$/.test(manifest.files[file])||await fileHash(containedPath(root,file))!==manifest.files[file])throw new Error(`程序包文件校验失败：${file}`);}
  for(const file of ['KiriuModsManager.exe','resources/app/package.json','resources/app/dist/main/index.js','resources/app/dist/preload/index.js','resources/app/dist/renderer/index.html','resources/app/assets/update-helper.ps1'])if(!Object.hasOwn(manifest.files,file))throw new Error(`程序包缺少必要文件：${file}`);
@@ -95,7 +97,7 @@ export class AppUpdater {
   return this.status;
  }
  private async work<T>(task:()=>Promise<T>):Promise<T>{if(this.busy)throw new Error('更新任务正在进行，请等待完成。');this.busy=true;try{return await task();}catch(error){this.status={...this.status,stage:'error',message:(error as Error).message};throw error;}finally{this.busy=false;}}
- private progress(stage:AppUpdateStatus['stage'],message:string,percent=0){this.status={...this.status,stage,message,percent};}
+ private progress(stage:AppUpdateStatus['stage'],message:string,percent=0){const changed=this.status.stage!==stage;this.status={...this.status,stage,message,percent};if(changed)void logEvent('updater','update.stage',{stage,percent,currentVersion:this.d.currentVersion,candidateVersion:this.status.release?.version});}
  async check(source:string){return this.work(async()=>{
   this.prepared='';this.source=validateUpdateSource(source);this.status={...this.status,release:undefined};this.progress('checking','正在检查最新稳定版本…');
   if(!this.source)throw new Error('尚未配置更新源，请保存 GitHub 仓库或 HTTPS 更新清单地址。');
@@ -125,7 +127,7 @@ export class AppUpdater {
  async install(source:string,confirm:(release:AppUpdateRelease)=>Promise<boolean>,start:(job:string)=>Promise<void>=startUpdateHelper){return this.work(async()=>{
   const release=this.status.release;if(!this.status.canInstall||!release||!this.prepared||this.source!==source||this.status.stage!=='ready')throw new Error('没有可安装的已验证更新，请重新检查并下载。');
   if(!await confirm(release))return null;
-  assertUpdateLocation(this.d.installRoot,await this.d.protectedPaths());await validateAppPackage(this.d.installRoot,this.d.currentVersion);await validateAppPackage(this.prepared,release.version);
+  assertUpdateLocation(this.d.installRoot,await this.d.protectedPaths());await validateAppPackage(this.d.installRoot,this.d.currentVersion,true);await validateAppPackage(this.prepared,release.version);
   const job=path.join(this.transaction,'job.json');
   await fs.writeFile(job,JSON.stringify({schemaVersion:1,pid:process.pid,installRoot:this.d.installRoot,prepared:this.prepared,backup:path.join(path.dirname(this.d.installRoot),`.kmm-previous-${randomUUID()}`),version:release.version,currentVersion:this.d.currentVersion,resultFile:path.join(this.d.cacheDirectory,'last-update.json')},null,2),{flag:'wx'});
   await start(job);this.progress('installing','正在退出，更新完成后将重新打开。',100);return this.status;

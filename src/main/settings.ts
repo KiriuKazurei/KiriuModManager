@@ -5,9 +5,9 @@ import { validateWebUrl, validateUpdateSource } from './web-links';
 import {writeAtomicJson,writeAtomicFile} from './atomic-json';
 import {createHash} from 'node:crypto';
 import {assertNoLinks} from './archive';
-export function defaultSettings(): Settings {
-  const empty = (): GamePaths => ({ xxmiRoot: '', gameDirectory: '', modsDirectory: '' });
-  return { version: 1, selectedGame: 'zzz', games: { zzz: empty(), endfield: empty() } };
+export function defaultSettings(installDirectory?:string): Settings {
+  const empty = (folder:string): GamePaths => ({ xxmiRoot: '', gameDirectory: '', modsDirectory: installDirectory?path.join(installDirectory,'Mods',folder):'' });
+  return { version: 1, selectedGame: 'zzz', games: { zzz: empty('ZZZ'), endfield: empty('Endfield') } };
 }
 export function validateSettings(value: unknown): Settings {
   const data = value as Settings;
@@ -46,23 +46,43 @@ export function mergeDesktopPreferences(current:Settings,patch:unknown):Settings
 export class SettingsStore {
   readonly file: string;
   private pending: Promise<unknown> = Promise.resolve();
-  constructor(directory: string) { this.file = path.join(directory, 'settings.json'); }
-  async read(): Promise<Settings> {
-    await this.pending;
-    try { return validateSettings(JSON.parse(await fs.readFile(this.file, 'utf8'))); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return defaultSettings();
-      throw new Error('无法读取本地配置；原文件已保留。请检查 settings.json 的格式和读取权限。');
+  constructor(directory: string,private readonly installDirectory?:string) { this.file = path.join(directory, 'settings.json'); }
+  private async withDefaultMods(settings:Settings){
+    let changed=false;
+    if(this.installDirectory){
+      const defaults=defaultSettings(this.installDirectory);
+      for(const game of ['zzz','endfield']as const)if(!settings.games[game].modsDirectory){
+        const directory=defaults.games[game].modsDirectory;
+        await assertNoLinks(directory);
+        try{await fs.mkdir(directory,{recursive:true});}
+        catch{throw new Error(`无法创建默认 Mod 目录：${directory}。请将管理器放在可写目录后重试；已有配置未更改。`);}
+        settings.games[game].modsDirectory=directory;changed=true;
+      }
     }
+    return {settings,changed};
+  }
+  private async readCurrent():Promise<Settings>{
+    let bytes:Buffer|undefined,settings:Settings;
+    try { bytes=await fs.readFile(this.file);settings=validateSettings(JSON.parse(bytes.toString('utf8'))); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') settings=defaultSettings();
+      else throw new Error('无法读取本地配置；原文件已保留。请检查 settings.json 的格式和读取权限。');
+    }
+    const initialized=await this.withDefaultMods(settings);
+    if(initialized.changed)await writeAtomicFile(this.file,JSON.stringify(initialized.settings,null,2),bytes?createHash('sha256').update(bytes).digest('hex'):'missing');
+    return initialized.settings;
+  }
+  read(): Promise<Settings> {
+    const task=this.pending.then(()=>this.readCurrent());this.pending=task.catch(()=>{});return task;
   }
   // Environment transactions merge only their game and reject an external edit before publication.
   saveGamePathsIfCurrent(game:GameId,expected:GamePaths,next:GamePaths):Promise<Settings>{
     const task=this.pending.then(async()=>{
       await assertNoLinks(this.file);let bytes:Buffer|undefined;
       try{bytes=await fs.readFile(this.file);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
-      const latest=bytes?validateSettings(JSON.parse(bytes.toString('utf8'))):defaultSettings();
+      const latest=bytes?validateSettings(JSON.parse(bytes.toString('utf8'))):defaultSettings(this.installDirectory);
       if(!Object.hasOwn(GAMES,game)||(['xxmiRoot','gameDirectory','modsDirectory']as const).some(key=>latest.games[game][key]!==expected[key]))throw new Error('游戏路径在提交期间变化，请重新检查。');
-      const settings=mergeGamePaths(latest,game,next);if((['xxmiRoot','gameDirectory','modsDirectory']as const).every(key=>latest.games[game][key]===settings.games[game][key]))return latest;
+      const {settings,changed}=await this.withDefaultMods(mergeGamePaths(latest,game,next));if(!changed&&(['xxmiRoot','gameDirectory','modsDirectory']as const).every(key=>latest.games[game][key]===settings.games[game][key]))return latest;
       const digest=bytes?createHash('sha256').update(bytes).digest('hex'):'missing';
       await writeAtomicFile(this.file,JSON.stringify(settings,null,2),digest);return settings;
     });
@@ -71,6 +91,7 @@ export class SettingsStore {
   save(input: unknown): Promise<Settings> {
     const settings = validateSettings(input);
     const task = this.pending.then(async () => {
+      await this.withDefaultMods(settings);
       await fs.mkdir(path.dirname(this.file), { recursive: true });
       await writeAtomicJson(this.file,JSON.stringify(settings,null,2));
       return settings;

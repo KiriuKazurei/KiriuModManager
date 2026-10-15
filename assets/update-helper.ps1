@@ -5,6 +5,7 @@ $resultPath = Join-Path $transaction 'result.json'
 $job = $null
 $movedOld = $false
 $movedNew = $false
+$movedUserDirectories = @()
 
 function Assert-PlainPath([string]$Target) {
     $cursor = [IO.Path]::GetFullPath($Target)
@@ -35,20 +36,31 @@ function Write-Result([string]$Stage, [string]$Message) {
         Move-Item -LiteralPath ($job.resultFile + '.tmp') -Destination $job.resultFile -Force
     }
 }
-function Assert-Package([string]$Root, [string]$Version) {
+function Assert-Package([string]$Root, [string]$Version, [bool]$AllowMods=$false) {
     Assert-PlainPath $Root
     $manifest = Get-Content -LiteralPath (Join-Path $Root 'kmm-package.json') -Encoding UTF8 -Raw | ConvertFrom-Json
     if ($manifest.schemaVersion -ne 1 -or $manifest.product -ne 'kiriu-mods-manager' -or $manifest.platform -ne 'win32-x64' -or $manifest.version -ne $Version) { throw 'Package identity mismatch.' }
     $seen = @{}
     foreach ($property in $manifest.files.PSObject.Properties) {
         $relative = [string]$property.Name
+        if ($relative -match '^(Mods|log)([/\\]|$)') { throw 'Package manifest contains a reserved user directory.' }
         if ($relative -match '(^/|^\\|:|(^|[/\\])\.\.([/\\]|$))') { throw 'Unsafe manifest path.' }
         $target = Join-Path $Root $relative
         Assert-Within $Root $target
         if ($property.Value -notmatch '^[a-f0-9]{64}$' -or (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant() -ne $property.Value) { throw ('File verification failed: ' + $relative) }
         $seen[$relative.Replace('\','/')] = $true
     }
-    foreach ($item in Get-ChildItem -LiteralPath $Root -Recurse -Force) {
+    $packageEntries = @()
+    foreach ($entry in Get-ChildItem -LiteralPath $Root -Force) {
+        Assert-PlainPath $entry.FullName
+        if ($entry.Name -in @('Mods','log')) {
+            if (-not $AllowMods -or -not $entry.PSIsContainer) { throw 'Mods / log are reserved user directories.' }
+            continue
+        }
+        $packageEntries += $entry
+        if ($entry.PSIsContainer) { $packageEntries += @(Get-ChildItem -LiteralPath $entry.FullName -Recurse -Force) }
+    }
+    foreach ($item in $packageEntries) {
         Assert-PlainPath $item.FullName
         if (-not $item.PSIsContainer) {
             $relative = $item.FullName.Substring($Root.TrimEnd('\').Length+1).Replace('\','/')
@@ -73,6 +85,18 @@ function Start-App {
     try { return Start-Process -FilePath (Join-Path $job.installRoot 'KiriuModsManager.exe') -WorkingDirectory $job.installRoot -WindowStyle Hidden -PassThru }
     finally { Remove-Item Env:KMM_UPDATE_JOB -ErrorAction SilentlyContinue }
 }
+function Move-Mods([string]$FromRoot, [string]$ToRoot, [string]$Name='Mods') {
+    if ($Name -notin @('Mods','log')) { throw 'Unrecognized user directory.' }
+    Assert-PlainPath $FromRoot
+    Assert-PlainPath $ToRoot
+    $source = Join-Path $FromRoot $Name
+    $destination = Join-Path $ToRoot $Name
+    if (-not (Test-Path -LiteralPath $source)) { return }
+    Assert-Within $FromRoot $source
+    Assert-Within $ToRoot $destination
+    if (-not (Get-Item -LiteralPath $source -Force).PSIsContainer) { throw 'User data must be a directory.' }
+    Move-WithRetry $source $destination
+}
 try {
     Assert-PlainPath $JobFile
     if ([IO.Path]::GetFileName($JobFile) -ne 'job.json' -or [IO.Path]::GetFileName($transaction) -notmatch '^\.kmm-update-[\w-]+$') { throw 'Invalid update transaction.' }
@@ -82,7 +106,7 @@ try {
     if ([IO.Path]::GetFullPath($job.prepared) -ne (Join-Path $transaction ('unpacked\KiriuModsManager-' + $job.version + '-win-x64'))) { throw 'Invalid prepared path.' }
     Assert-Within $transaction $job.prepared
     Assert-PlainPath $job.backup
-    Assert-Package $job.installRoot $job.currentVersion
+    Assert-Package $job.installRoot $job.currentVersion $true
     Assert-Package $job.prepared $job.version
     $owner = Get-Process -Id $job.pid -ErrorAction Stop
     if ($owner.MainModule.FileName -ne (Join-Path $job.installRoot 'KiriuModsManager.exe')) { throw 'Parent executable mismatch.' }
@@ -92,6 +116,12 @@ try {
     $movedOld = $true
     Move-WithRetry $job.prepared $job.installRoot
     $movedNew = $true
+    foreach ($name in @('Mods','log')) {
+        if (Test-Path -LiteralPath (Join-Path $job.backup $name)) {
+            Move-Mods $job.backup $job.installRoot $name
+            $movedUserDirectories += $name
+        }
+    }
     $newApp = Start-App
     for ($attempt=0; $attempt -lt 120; $attempt++) {
         $ackPath = Join-Path $transaction 'started.json'
@@ -109,7 +139,10 @@ try {
     $failure = $_.Exception.Message
     try {
         if ($movedOld) {
-            if ($movedNew) { Move-WithRetry $job.installRoot (Join-Path $transaction 'failed-package') }
+            if ($movedNew) {
+                foreach ($name in $movedUserDirectories) { Move-Mods $job.installRoot $job.backup $name }
+                Move-WithRetry $job.installRoot (Join-Path $transaction 'failed-package')
+            }
             Move-WithRetry $job.backup $job.installRoot
             $null = Start-App
             Write-Result 'rolled-back' ('Update failed; previous package restored. ' + $failure)

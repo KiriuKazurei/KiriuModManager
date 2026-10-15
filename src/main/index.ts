@@ -24,6 +24,11 @@ import {ModUpdates} from './mod-updates';
 import {Inspections} from './inspections';
 import {PresetManifests} from './preset-manifests';
 import {isInside} from './inspection-files';
+import {ApplicationLog,useApplicationLog,logContext} from './application-log';
+import {wireElectronLogging,startLocalCrashReports} from './electron-logging';
+import {randomUUID} from 'node:crypto';
+import {assertNoLinks} from './archive';
+import {promises as fs} from 'node:fs';
 
 const dataDirectory = process.env.KMM_DATA_DIR;
 if (dataDirectory) {
@@ -39,13 +44,19 @@ let modBrowser:ModBrowser|null=null;
 let finishFileOperations:()=>Promise<void>=async()=>{};let quitDrained=false;
 export function desktopRuntime(){return {window,floatingWindow,tray,trayMenu,modBrowser};}
 const singleton=app.requestSingleInstanceLock();
+let applicationLog:ApplicationLog|undefined;let logsClosed=false;
+wireElectronLogging(()=>applicationLog);
 if(!singleton)app.quit();
 app.on('second-instance',()=>{if(window?.isMinimized())window.restore();window?.show();window?.focus();});
+app.on('will-quit',event=>{if(applicationLog&&!logsClosed){event.preventDefault();logsClosed=true;void applicationLog.close().finally(()=>app.quit());}});
 app.on('before-quit',event=>{quitting=true;if(!quitDrained){event.preventDefault();void Promise.allSettled([modBrowser?.close(),finishFileOperations()]).then(()=>{quitDrained=true;app.quit();});return;}tray?.destroy();tray=null;});
 app.whenReady().then(async () => {
   if(!singleton)return;
-  const store = new SettingsStore(app.getPath('userData'));
-  const operationLog=new OperationLog(app.getPath('userData'));
+  const installRoot=app.isPackaged?path.dirname(process.execPath):app.getAppPath();
+  applicationLog=await ApplicationLog.open({installDirectory:installRoot,dataDirectory:app.getPath('userData'),version:app.getVersion(),runtime:{electron:process.versions.electron,node:process.versions.node}});useApplicationLog(applicationLog);
+  await startLocalCrashReports(applicationLog);
+  const store = new SettingsStore(app.getPath('userData'),installRoot);
+  const operationLog=new OperationLog(app.getPath('userData'),applicationLog);
   const mods = new ModService(app.getPath('userData'), async game => (await store.read()).games[game]);
   const business=new BusinessService(app.getPath('userData'),mods,store);
   const inspections=new Inspections(app.getPath('userData'),store,mods,business,app.getVersion());
@@ -56,7 +67,7 @@ app.whenReady().then(async () => {
   const ini=new IniService(mods,business.recovery);
   const characterCovers=new CharacterCoverService(app.getPath('userData'),path.join(app.getAppPath(),'assets','character-covers'),mods,bytes=>!nativeImage.createFromBuffer(bytes).isEmpty());
   const deployment = new DeploymentService({ fetch: (url, options) => net.fetch(url, options), cacheDirectory: path.join(app.getPath('userData'), 'downloads'), checkRuntime: () => checkRuntime() });
-  const updater=new AppUpdater({fetch:(url,options)=>net.fetch(url,options),currentVersion:app.getVersion(),cacheDirectory:path.join(app.getPath('userData'),'app-updates'),installRoot:path.dirname(process.execPath),packaged:app.isPackaged,helperPath:path.join(app.getAppPath(),'assets','update-helper.ps1'),protectedPaths:async()=>{const settings=await store.read();return [app.getPath('userData'),...Object.values(settings.games).flatMap(game=>Object.values(game))];}});
+  const updater=new AppUpdater({fetch:(url,options)=>net.fetch(url,options),currentVersion:app.getVersion(),cacheDirectory:path.join(app.getPath('userData'),'app-updates'),installRoot,packaged:app.isPackaged,helperPath:path.join(app.getAppPath(),'assets','update-helper.ps1'),protectedPaths:async()=>{const settings=await store.read();return [app.getPath('userData'),...Object.values(settings.games).flatMap(game=>[game.xxmiRoot,game.gameDirectory,...(game.modsDirectory&&isInside(path.join(installRoot,'Mods'),game.modsDirectory)?[]:[game.modsDirectory])])];}});
   let preparingUpdateInstall=false;
   const updateSource=async()=>(await store.read()).desktop?.updateSourceUrl??DEFAULT_APP_UPDATE_SOURCE;
   let pending:Promise<unknown>=Promise.resolve();
@@ -67,6 +78,8 @@ app.whenReady().then(async () => {
   const trustedDocuments=new WeakMap<BrowserWindow,string>();
   const documentUrl=(value:string)=>{try{const url=new URL(value);url.hash='';return url.href;}catch{return '';}};
   const loadWindow=async(target:BrowserWindow,floating=false)=>{
+    target.on('unresponsive',()=>{void applicationLog?.record('runtime','window.unresponsive',{origin:floating?'floating':'main'},'warning');});
+    target.on('responsive',()=>{void applicationLog?.record('runtime','window.responsive',{origin:floating?'floating':'main'});});
     target.removeMenu();
     target.webContents.setWindowOpenHandler(()=>({action:'deny'}));
     target.webContents.on('will-navigate',event=>event.preventDefault());
@@ -88,14 +101,16 @@ app.whenReady().then(async () => {
   const handle = <C extends IPCChannel>(channel:C, work:(...args:IPCArguments<C>)=>Promise<IPCValue<C>>) => {
     ipcMain.handle(channel, async (event: IpcMainInvokeEvent, ...args: unknown[]): Promise<Result<IPCValue<C>>> => {
       const sender=[window,floatingWindow].find(target=>target&&!target.isDestroyed()&&event.sender===target.webContents);
-      if (!sender || event.senderFrame !== sender.webContents.mainFrame || documentUrl(event.senderFrame.url)!==trustedDocuments.get(sender)) return { ok: false, error: '此页面无权访问桌面接口。' };
-      if(channel.startsWith('environment:')&&sender!==window)return {ok:false,error:'请在主窗口检查和修复游戏环境。'};
-      if(channel.startsWith('compatibility:')&&sender!==window)return {ok:false,error:'请在主窗口查看兼容测试记录。'};
-      if((channel.startsWith('mod-import:')||channel==='mods:import')&&sender!==window)return {ok:false,error:'请在主窗口使用导入预检。'};
-      if(channel==='desktop:window-theme'&&sender!==window)return {ok:false,error:'请在主窗口设置标题栏主题。'};
-      if((channel.startsWith('preset-manifest:')||['presets:preview','presets:commit','presets:apply'].includes(channel))&&sender!==window)return {ok:false,error:'请在主窗口使用预设预览与清单。'};
-      if((channel.startsWith('inspection:')||channel.startsWith('diagnostics:')||['recovery:restore','recovery:create','recovery:protect','recovery:prepare-restore','recovery:apply-restore','recovery:prepare-cleanup','recovery:apply-cleanup','recovery:cleanup-job','conflicts:details'].includes(channel))&&sender!==window)return {ok:false,error:'请在主窗口使用诊断、恢复管理和冲突详情。'};
-      if((channel.startsWith('market:')||channel==='desktop:link'&&args[1]==='market')&&sender!==window)return {ok:false,error:'请在主窗口使用获取 Mod 和下载进度。'};
+      const deny=(error:string):Result<IPCValue<C>>=>{void applicationLog?.record('ipc','ipc.denied',{action:channel,origin:sender===floatingWindow?'floating':sender===window?'main':'untrusted',reason:error},'warning');return {ok:false,error};};
+      if (!sender || event.senderFrame !== sender.webContents.mainFrame || documentUrl(event.senderFrame.url)!==trustedDocuments.get(sender)) {void applicationLog?.record('ipc','ipc.denied',{action:channel,reason:'untrusted-frame'},'warning');return { ok: false, error: '此页面无权访问桌面接口。' };}
+      if(channel.startsWith('logs:')&&channel!=='logs:renderer'&&sender!==window){void applicationLog?.record('ipc','ipc.denied',{action:channel,reason:'main-window-only'},'warning');return {ok:false,error:'请在主窗口查看诊断日志。'};}
+      if(channel.startsWith('environment:')&&sender!==window)return deny('请在主窗口检查和修复游戏环境。');
+      if(channel.startsWith('compatibility:')&&sender!==window)return deny('请在主窗口查看兼容测试记录。');
+      if((channel.startsWith('mod-import:')||channel==='mods:import')&&sender!==window)return deny('请在主窗口使用导入预检。');
+      if(channel==='desktop:window-theme'&&sender!==window)return deny('请在主窗口设置标题栏主题。');
+      if((channel.startsWith('preset-manifest:')||['presets:preview','presets:commit','presets:apply'].includes(channel))&&sender!==window)return deny('请在主窗口使用预设预览与清单。');
+      if((channel.startsWith('inspection:')||channel.startsWith('diagnostics:')||['recovery:restore','recovery:create','recovery:protect','recovery:prepare-restore','recovery:apply-restore','recovery:prepare-cleanup','recovery:apply-cleanup','recovery:cleanup-job','conflicts:details'].includes(channel))&&sender!==window)return deny('请在主窗口使用诊断、恢复管理和冲突详情。');
+      if((channel.startsWith('market:')||channel==='desktop:link'&&args[1]==='market')&&sender!==window)return deny('请在主窗口使用获取 Mod 和下载进度。');
       const run=async():Promise<Result<IPCValue<C>>>=>{
       if(updater.status.stage==='installing'&&!['update:status','desktop:status','desktop:show','desktop:quit'].includes(channel))return {ok:false,error:'正在退出并安装更新，请等待重新打开。'};
       try { const value=await operationLog.run(channel,args,()=>work(...args as IPCArguments<C>),sender===floatingWindow?'floating':'main');if(/^(settings:(save|save-game-paths|save-desktop-preferences)|mods:(operate|batch|exclusive-save|exclusive-delete|import|replace|delete|choose-cover|group)|presets:(save|add-members|delete|apply|commit)|mod-import:commit|preset-manifest:(commit|replacement)|profiles:(capture|duplicate|apply)|ini:save|recovery:(create|restore|apply-restore|apply-cleanup|protect)|xxmi:(deploy|sync))$/.test(channel)&&!(['presets:commit','mod-import:commit'].includes(channel)&&value===null)){if(args[0]==='zzz'||args[0]==='endfield')inspections.jobs.invalidate(args[0]);await broadcast(/^(settings:(save|save-game-paths|save-desktop-preferences)|recovery:(restore|apply-restore)|xxmi:(deploy|sync))$/.test(channel));await updateTray();}return { ok: true, value }; }
@@ -107,9 +122,26 @@ app.whenReady().then(async () => {
         return { ok: false, error: errorText || '操作失败，请检查路径和权限。' };
       }
       };
-      return responsiveChannels.has(channel)?run():mutation(run);
+      if(channel==='logs:renderer')return logContext.run({operationId:randomUUID(),action:channel,origin:sender===floatingWindow?'floating':'main'},async()=>{const result=await run();if(!result.ok)await applicationLog?.record('logging','renderer.payload-rejected',{},'warning');return result;});
+      const requestId=randomUUID(),received=Date.now(),origin=sender===floatingWindow?'floating':'main';
+      void applicationLog?.record('ipc','ipc.received',{operationId:requestId,action:channel,origin});
+      const execute=()=>logContext.run({operationId:requestId,action:channel,...(args[0]==='zzz'||args[0]==='endfield'?{gameId:args[0]}:{})},async()=>{
+        await applicationLog?.record('ipc','ipc.dispatched',{origin,queueMs:Date.now()-received});
+        const result=await run();await applicationLog?.record('ipc','ipc.response',{origin,ok:result.ok,durationMs:Date.now()-received},result.ok?'info':'error',result.ok?undefined:new Error(result.error));return result;
+      });
+      return responsiveChannels.has(channel)||channel.startsWith('logs:')?execute():mutation(execute);
     });
   };
+  handle('logs:report',async game=>{if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');return applicationLog!.report(game);});
+  handle('logs:open',async()=>{const directory=applicationLog!.directory;await assertNoLinks(directory);await fs.mkdir(directory,{recursive:true});const error=await shell.openPath(directory);if(error)throw new Error('无法打开日志目录：'+error);});
+  const rendererRates=new Map<number,{second:number;count:number}>();
+  handle('logs:renderer',async event=>{
+    if(!event||typeof event!=='object'||!['action','navigation','error','unhandled-rejection','react-error'].includes(event.kind)||Object.keys(event).some(key=>!['kind','control','page','gameId','message','stack'].includes(key))||event.gameId!==undefined&&!Object.hasOwn(GAMES,event.gameId)||['control','page','message','stack'].some(key=>{const value=event[key as keyof typeof event];return value!==undefined&&(typeof value!=='string'||value.length>6000);}))throw new Error('界面日志格式无效。');
+    // No form values, arbitrary paths, URL payloads or account data are accepted.
+    const second=Math.floor(Date.now()/1000),rate=rendererRates.get(process.pid);if(rate?.second===second){if(++rate.count>200){if(rate.count===201)await applicationLog!.record('logging','renderer.rate-limited',{},'warning');return;}}else rendererRates.set(process.pid,{second,count:1});
+    const error=['error','unhandled-rejection','react-error'].includes(event.kind)?Object.assign(new Error(event.message||'Renderer error'),{stack:event.stack}):undefined;
+    await applicationLog!.record('renderer','renderer.'+event.kind,{control:event.control,page:event.page,gameId:event.gameId},error?'error':'info',error);
+  });
   handle('environment:check',(game,mode)=>environment.start(game,mode));
   handle('compatibility:status',game=>compatibility.read(game));
   handle('compatibility:import',async game=>{if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏');const choice=await dialog.showOpenDialog(window!,{title:'导入 SDK 进程兼容记录',properties:['openFile'],filters:[{name:'SDK 兼容记录',extensions:['json']}]});return choice.canceled||!choice.filePaths[0]?null:compatibility.import(game,choice.filePaths[0]);});
@@ -278,7 +310,7 @@ app.whenReady().then(async () => {
     await environment.assertReady(validateSettings(input).selectedGame,true);
     const settings = await gameConfiguration(input); const gameId = settings.selectedGame;
     const fields = settings.games[gameId];
-    if (!fields.modsDirectory && fields.xxmiRoot) fields.modsDirectory = path.join(fields.xxmiRoot, GAMES[gameId].importer, 'Mods');
+    if (!fields.modsDirectory) fields.modsDirectory = path.join(installRoot,'Mods',gameId==='zzz'?'ZZZ':'Endfield');
     const result = await deployment.deploy(gameId, fields);
     try { return { ...result, settings: await store.save(settings) }; }
     catch { throw new Error('XXMI 文件与路径已部署，但管理器配置保存失败。请检查数据目录权限并手动保存路径。'); }
@@ -307,10 +339,11 @@ app.whenReady().then(async () => {
   window.on('closed', () => { window = null; floatingWindow?.close(); app.quit(); });
   try{const image=nativeImage.createFromPath(path.join(app.getAppPath(),'assets','tray.png'));if(image.isEmpty())throw new Error('Tray icon missing');tray=new Tray(image);tray.setToolTip('Kiriu Mod Manager · 本地 Mod 管理');tray.on('double-click',showMain);await updateTray();}catch{tray=null;closeToTray=false;}
   await loadWindow(window);
+  await applicationLog.record('lifecycle','session.window-ready',{webContentsId:window.webContents.id});
   // A restarted update must expose its loaded window even if ready-to-show is delayed.
   window?.show();
   if(process.env.KMM_UPDATE_JOB){for(let i=0;i<100&&window&&!window.isVisible();i++)await new Promise(resolve=>setTimeout(resolve,50));if(window?.isVisible())await acknowledgeUpdate(process.execPath,app.getVersion());}
-}).catch(error => { console.error('应用启动失败:', error.message); app.quit(); });
+}).catch(error => {applicationLog?.fatalSync('startup.failed',error);console.error('应用启动失败:', error.message);app.quit();});
 app.on('window-all-closed', () => app.quit());
 
 

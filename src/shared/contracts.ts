@@ -74,6 +74,9 @@ export interface AppUpdateStatus {
   lastResult?:{stage:string;message:string;backup?:string};
 }
 export interface DesktopAPI {
+  logReport(game:GameId):Promise<Result<import('./logging').LogReport>>;
+  openLogDirectory():Promise<Result<void>>;
+  reportRendererEvent(event:import('./logging').RendererLogEvent):Promise<Result<void>>;
   compatibilityStatus(game:GameId):Promise<Result<import('./compatibility').CompatibilityStatus>>;
   importCompatibilityEvidence(game:GameId):Promise<Result<import('./compatibility').CompatibilityStatus|null>>;
   checkGameEnvironment(game:GameId,mode:'quick'|'discover'):Promise<Result<InspectionJob>>;

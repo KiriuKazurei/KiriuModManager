@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {promises as fs} from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {zipSync,strToU8} from 'fflate';
 import {AppUpdater,assertUpdateLocation,newerVersion,resolveAppUpdate,validateAppPackage,validateUpdateManifest} from '../src/main/app-updater';
 import {validateUpdateSource} from '../src/main/web-links';
@@ -74,4 +76,51 @@ test('overlapping user data and current unlisted files prevent installation; mod
 test('concurrent update tasks reject while status remains readable; checking a current or older version never downloads',async()=>{
  const f=await fixture();let release!:()=>void;const hold=new Promise<void>(resolve=>{release=resolve;});await f.updater.check(source);const download=f.updater.download(source,async()=>{await hold;return false;});await assert.rejects(f.updater.check(source),/正在进行/);assert.equal((await f.updater.readStatus()).currentVersion,'0.0.1');release();await download;
  f.info.version='0.0.1';assert.equal((await f.updater.check(source)).stage,'current');await assert.rejects(f.updater.download(source,async()=>true),/已改变/);assert.equal(f.urls.filter(url=>url.endsWith('new.zip')).length,0);
+});
+
+test('current managed Mods tree is preserved and excluded only from installed package verification',async()=>{
+ const f=await fixture();const mod=path.join(f.root,'Mods','ZZZ','DISABLED_Test','main.ini');await fs.mkdir(path.dirname(mod),{recursive:true});await fs.writeFile(mod,'user mod bytes');
+ await validateAppPackage(f.root,'0.0.1',true);await assert.rejects(validateAppPackage(f.root,'0.0.1'),/保留/);
+ await f.updater.check(source);assert.equal((await f.updater.download(source,async()=>true))?.stage,'ready');
+ let started=false;await f.updater.install(source,async()=>true,async()=>{started=true;});assert.equal(started,true);assert.equal(await fs.readFile(mod,'utf8'),'user mod bytes');
+ await fs.writeFile(path.join(f.root,'personal.txt'),'unlisted');await assert.rejects(validateAppPackage(f.root,'0.0.1',true),/清单外/);
+});
+test('incoming packages cannot ship the reserved Mods directory even with a valid file manifest',async()=>{
+ const files=payload();const mod=strToU8('must not overwrite user mods');files['Mods/ZZZ/mod.ini']=mod;
+ const fileManifest=JSON.parse(Buffer.from(files['kmm-package.json']).toString());fileManifest.files['Mods/ZZZ/mod.ini']=digest(mod);files['kmm-package.json']=strToU8(JSON.stringify(fileManifest));
+ const archive=zipSync(Object.fromEntries(Object.entries(files).map(([name,bytes])=>[`KiriuModsManager-0.0.2-win-x64/${name}`,bytes])));const f=await fixture(archive);await f.updater.check(source);await assert.rejects(f.updater.download(source,async()=>true),/Mods/);await validateAppPackage(f.root,'0.0.1');
+});
+
+test('Windows update helper transfers Mods and restores identical bytes when rolling back', {skip:process.platform!=='win32'},async()=>{
+ const f=await fixture(),prepared=path.join(f.run,'prepared'),backup=path.join(f.run,'backup'),failed=path.join(f.run,'failed');
+ for(const [name,bytes]of Object.entries(payload())){const file=path.join(prepared,name);await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,bytes);}
+ const files={'Mods/ZZZ/DISABLED_测试/main.ini':'zzz bytes','Mods/Endfield/角色/texture.dds':'endfield bytes','log/application-fixture.jsonl':'preserved diagnostic bytes'};
+ for(const [name,bytes]of Object.entries(files)){const file=path.join(f.root,name);await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,bytes);}
+ const driver=path.join(f.run,'helper-functions.ps1');await fs.writeFile(driver,`\uFEFFparam([string]$Helper,[string]$Old,[string]$Prepared,[string]$Backup,[string]$Failed)
+$ErrorActionPreference='Stop'
+$tokens=$null; $errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile($Helper,[ref]$tokens,[ref]$errors)
+if ($errors.Count) { throw 'Helper parse failed.' }
+foreach ($definition in $ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst]},$false)) { . ([scriptblock]::Create($definition.Extent.Text)) }
+foreach ($target in @($Old,$Prepared,$Backup,$Failed)) { Assert-Within $PSScriptRoot $target }
+Assert-Package $Old '0.0.1' $true
+Assert-Package $Prepared '0.0.2'
+Move-WithRetry $Old $Backup
+Move-WithRetry $Prepared $Old
+Move-Mods $Backup $Old
+Move-Mods $Backup $Old 'log'
+Assert-Package $Old '0.0.2' $true
+if (-not (Test-Path -LiteralPath (Join-Path $Old 'Mods/ZZZ/DISABLED_测试/main.ini'))) { throw 'Mods lost during update.' }
+Move-Mods $Old $Backup
+Move-Mods $Old $Backup 'log'
+Move-WithRetry $Old $Failed
+Move-WithRetry $Backup $Old
+Assert-Package $Old '0.0.1' $true
+Write-Output 'Mods transfer and rollback passed.'
+`,'utf8');
+ // Windows PowerShell must not inherit PowerShell Core's module directories from the test runner.
+ const env={...process.env,PSModulePath:path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','Modules')};
+ await promisify(execFile)('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',driver,'-Helper',path.resolve('assets/update-helper.ps1'),'-Old',f.root,'-Prepared',prepared,'-Backup',backup,'-Failed',failed],{env,windowsHide:true,timeout:30000});
+ for(const [name,bytes]of Object.entries(files))assert.equal(await fs.readFile(path.join(f.root,name),'utf8'),bytes);
+ await assert.rejects(fs.stat(path.join(failed,'Mods')),{code:'ENOENT'});await assert.rejects(fs.stat(path.join(failed,'log')),{code:'ENOENT'});await validateAppPackage(f.root,'0.0.1',true);await validateAppPackage(failed,'0.0.2');
 });

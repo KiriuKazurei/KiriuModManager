@@ -30,7 +30,8 @@
 .app-shell button:focus-visible,.floating-view button:focus-visible,.loading button:focus-visible,button.theme-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 button.theme-toggle{width:34px;height:34px;min-height:34px;padding:0;border-radius:50%;flex-shrink:0}
 .sidebar{background:var(--bg);border-right:none}
-.brand-mark{color:var(--accent-ink);background:var(--accent);border:none;border-radius:6px;box-shadow:none}
+.brand-mark{width:36px;height:36px;aspect-ratio:1;flex:0 0 auto;font-size:24px;font-weight:700;line-height:1;color:var(--accent);background:var(--accent-ink);border:2px solid var(--accent);border-radius:0;box-shadow:none}
+:root[data-theme="day"] .brand-mark{background:#596273}
 .card,.mod-list-panel,.mod-detail,.tool-list,.tool-detail,.ini-editor{border:1px solid var(--line);box-shadow:none}
 input:not([type=checkbox]):not([type=radio]),select,textarea{height:32px;padding:4px 11px;border-radius:6px;border:1px solid var(--field-border);background:var(--field-bg);color:var(--text);box-shadow:none;transition:border-color .2s ease,box-shadow .2s ease}
 textarea{height:auto;min-height:72px;line-height:1.6}
@@ -89,7 +90,8 @@ input[type=checkbox],input[type=radio]{width:16px;height:16px;margin:0;accent-co
 .app-shell{grid-template-columns:var(--sidebar-width,248px) minmax(0,1fr)}
 .sidebar{padding:var(--gap-lg) 16px;overflow:hidden auto}
 .sidebar-head{display:flex;align-items:center;justify-content:space-between;gap:var(--gap);margin-bottom:var(--gap)}
-.sidebar-head .brand{margin:0 4px;min-width:0}
+.sidebar-head .brand{margin:0;min-width:0;gap:6px;letter-spacing:0;font-size:clamp(13px,calc(var(--sidebar-width,248px) / 16),17px)}
+.sidebar-head .brand-mark{flex-shrink:0}
 .app-shell button.sidebar-toggle{width:var(--control-h);height:var(--control-h);min-height:var(--control-h);padding:0;flex-shrink:0;border-radius:10px}
 .nav-label{margin:var(--gap-lg) 4px var(--gap)}
 .sidebar nav{gap:var(--gap)}
@@ -205,3 +207,5 @@ body.sidebar-resizing{cursor:col-resize;user-select:none}
 
 html.theme-switching,html.theme-switching *{transition:none!important}
 ::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
+.log-actions{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}.log-location,.logs-panel code{overflow-wrap:anywhere}.logs-panel details{margin-top:12px}.log-entry{padding:12px 0;border-bottom:1px solid var(--line)}.log-entry code{display:block;margin-top:6px}.logs-panel>details{max-height:440px;overflow:auto}
+.logs-panel>.hint{display:block!important}

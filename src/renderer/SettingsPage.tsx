@@ -81,7 +81,7 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
           {([
             ['xxmiRoot', 'XXMI 安装根目录', '选择外层根目录，其中应包含 Resources\\Bin\\XXMI Launcher.exe。'],
             ['gameDirectory', '游戏目录', '已安装游戏的位置。“保存配置”只保存本机设置；部署或同步会配置 XXMI。'],
-            ['modsDirectory', 'Mod 目录', '保存不会改写 loader。新用户部署可留空，默认使用所选组件下的 Mods 目录。'],
+            ['modsDirectory', 'Mod 目录', '默认在管理器目录下按游戏分开保存：Mods/ZZZ 或 Mods/Endfield。可选择其它目录；保存不会改写 loader，需使用“同步路径到 XXMI”接入。'],
           ] as const).map(([field, label, hint]) => <div className="field" key={field}><label htmlFor={field}>{label}</label><div className="path-control"><input id={field} name={field} value={fields[field]} placeholder="选择目录或输入完整路径" onChange={event => update(field, event.target.value)} disabled={busy} aria-describedby={`${field}-hint`} spellCheck={false}/><button type="button" disabled={busy} aria-label={`选择${label}`} onClick={() => void action(async () => { const selected = unwrap(await window.kmm.chooseDirectory(fields[field])); if (selected) update(field, selected); })}><Icon kind="folder"/>选择目录</button></div><p id={`${field}-hint`} className="hint">{hint}</p></div>)}
           <div className="form-actions"><button type="button" disabled={busy || !fields.xxmiRoot.trim()} onClick={() => void action(detect)}>{busy ? '正在处理…' : '检测已有安装'}</button><button type="submit" className="primary" disabled={busy || !dirty}>保存配置</button></div>
         </form>

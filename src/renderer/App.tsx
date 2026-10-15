@@ -1,5 +1,6 @@
 import {EnvironmentPanel} from './EnvironmentPanel';
 import {DiagnosticsPanel} from './DiagnosticsPanel';
+import {reportRendererEvent} from './logging';
 import {RecoveryPage} from './RecoveryPage';
 import {ConflictPage} from './ConflictPage';
 import type {IniNavigationTarget} from '../shared/inspections';
@@ -31,6 +32,7 @@ export function App() {
   const [desktopMessage,setDesktopMessage]=useState('');
   async function load(){setError('');try{const data=unwrap(await window.kmm.readSettings());acceptSettings(data);setPage(data.games[data.selectedGame].modsDirectory?'mods':'preferences');}catch(e){setError((e as Error).message);}}
   useEffect(()=>{void load();},[]);
+  useEffect(()=>{reportRendererEvent({kind:'navigation',page:page+(page==='preferences'?':'+settingsTab:''),gameId:settings?.selectedGame});},[page,settingsTab,settings?.selectedGame]);
   useEffect(()=>window.kmm.onDesktopChange(event=>{if(!event.settingsChanged)return;void window.kmm.readSettings().then(result=>{try{acceptSettings(unwrap(result));}catch(e){setError((e as Error).message);}});}),[]);
   async function desktopAction(work:()=>Promise<string|void>){setBusy(true);setError('');setDesktopMessage('');try{setDesktopMessage(await work()||'桌面操作已完成。');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   async function selectGame(game:GameId) {
@@ -42,7 +44,7 @@ export function App() {
   const game=settings.selectedGame;
   const navButton=(key:typeof page,label:string,icon:Parameters<typeof Icon>[0]['kind'],onClick=()=>setPage(key))=><button key={key} className={page===key?'active':''} aria-current={page===key?'page':undefined} title={sidebar.collapsed?label:undefined} aria-label={sidebar.collapsed?label:undefined} disabled={busy} onClick={onClick}><Icon kind={icon}/><span className="nav-text">{label}</span></button>;
   return <div className={`app-shell ${sidebar.collapsed?'sidebar-collapsed':''}`} style={sidebar.shellStyle}>
-    <aside className="sidebar"><div className="sidebar-head"><div className="brand"><span className="brand-mark">K</span><div>KIRIU<span>MOD MANAGER</span></div></div><button type="button" className="sidebar-toggle" aria-label={sidebar.collapsed?'展开侧边栏':'折叠侧边栏'} aria-expanded={!sidebar.collapsed} title={sidebar.collapsed?'展开侧边栏':'折叠侧边栏'} onClick={sidebar.toggle}><Icon kind="panel"/></button></div><div className="nav-label">游戏配置</div>
+    <aside className="sidebar"><div className="sidebar-head"><div className="brand"><span className="brand-mark">K</span><div>ModManager<span>MOD MANAGER</span></div></div><button type="button" className="sidebar-toggle" aria-label={sidebar.collapsed?'展开侧边栏':'折叠侧边栏'} aria-expanded={!sidebar.collapsed} title={sidebar.collapsed?'展开侧边栏':'折叠侧边栏'} onClick={sidebar.toggle}><Icon kind="panel"/></button></div><div className="nav-label">游戏配置</div>
       <nav className="game-nav" aria-label="游戏配置"><label className="sr-only" htmlFor="current-game">当前游戏</label><select id="current-game" aria-label="当前游戏" className="current-game-select" value={game} disabled={busy} onChange={event=>void selectGame(event.target.value as GameId)}>{(Object.keys(GAMES) as GameId[]).map(id=><option key={id} value={id}>{GAMES[id].name} · {GAMES[id].importer}</option>)}</select></nav>
       <div className="nav-label">管理</div><nav aria-label="主要导航">{navButton('mods','Mod 库','grid',()=>{if(page!=='market'&&page!=='downloads')setScope(null);setPage('mods');})}{navButton('market','获取Mod','search',()=>{setIniId('');setPage('market');})}{navButton('downloads','下载进度','download',()=>{setIniId('');setPage('downloads');})}</nav>
       <nav className="tools-nav" aria-label="工作区工具">{navButton('conflicts','候选冲突','grid')}{navButton('recovery','备份与恢复','folder')}<button title={sidebar.collapsed?'快速管理浮窗':undefined} aria-label={sidebar.collapsed?'快速管理浮窗':undefined} disabled={busy} onClick={()=>void desktopAction(async()=>{unwrap(await window.kmm.floating(true));})}><Icon kind="grid"/><span className="nav-text">快速管理浮窗</span></button></nav>

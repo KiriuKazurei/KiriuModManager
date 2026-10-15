@@ -1,5 +1,7 @@
 # XXMI 集成与部署说明
 
+管理器首次读取或原 Mod 路径为空时，默认创建管理器安装目录下的 `Mods/ZZZ` 和 `Mods/Endfield`，各游戏分别保存；源码模式使用项目根目录。已有自定义 Mod 目录保持原值，不自动搬动文件。默认目录属于管理器库，仍需通过“同步路径到 XXMI”或新部署配置 loader 后才能由游戏读取。
+
 更新日期：2026-10-12。以当前 `xxmi.ts/sync.ts/deployment.ts/releases.ts/runtime.ts/desktop.ts` 为准。旧样本与方案全文保存于 [disable/XXMI集成与部署说明.md](disable/XXMI集成与部署说明.md)，不把旧 K: 盘路径当当前用户配置。当前完整 API 见[桌面接口文档](桌面接口文档.md)。
 
 ## 职责与三个路径

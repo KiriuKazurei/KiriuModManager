@@ -4,5 +4,7 @@ import { App } from './App';
 import { FloatingView } from './FloatingView';
 import { applyStoredTheme } from './theme';
 import './styles.css';
+import {installRendererLogging,rendererError} from './logging';
+installRendererLogging();
 applyStoredTheme();
-createRoot(document.getElementById('root')!).render(<React.StrictMode>{location.hash==='#floating'?<FloatingView/>:<div className="main-window"><div className="window-titlebar" aria-hidden="true"/><App /></div>}</React.StrictMode>);
+createRoot(document.getElementById('root')!,{onUncaughtError:(error)=>rendererError('react-error',error,'react.uncaught'),onCaughtError:(error)=>rendererError('react-error',error,'react.caught'),onRecoverableError:(error)=>rendererError('react-error',error,'react.recoverable')}).render(<React.StrictMode>{location.hash==='#floating'?<FloatingView/>:<div className="main-window"><div className="window-titlebar" aria-hidden="true"/><App /></div>}</React.StrictMode>);

@@ -1,4 +1,6 @@
 node_modules/
+Mods/
+/log/
 dist/
 .run-data/
 *.log
