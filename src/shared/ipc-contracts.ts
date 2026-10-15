@@ -2,6 +2,10 @@ import type {DesktopAPI,Result} from './contracts';
 
 // Type-only correspondence: sandbox preload must not require this file at runtime.
 export interface IPCContracts {
+  'environment:check':DesktopAPI['checkGameEnvironment'];
+  'environment:choose':DesktopAPI['chooseGameInstallation'];
+  'environment:prepare':DesktopAPI['prepareEnvironmentRepair'];
+  'environment:apply':DesktopAPI['applyEnvironmentRepair'];
   'mod-import:prepare':DesktopAPI['prepareModImport'];
   'mod-import:revise':DesktopAPI['reviseModImport'];
   'mod-import:files':DesktopAPI['modImportFiles'];

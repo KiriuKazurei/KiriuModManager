@@ -2,7 +2,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { Settings, GamePaths, GAMES, GameId, DesktopPreferences } from '../shared/contracts';
 import { validateWebUrl, validateUpdateSource } from './web-links';
-import {writeAtomicJson} from './atomic-json';
+import {writeAtomicJson,writeAtomicFile} from './atomic-json';
+import {createHash} from 'node:crypto';
+import {assertNoLinks} from './archive';
 export function defaultSettings(): Settings {
   const empty = (): GamePaths => ({ xxmiRoot: '', gameDirectory: '', modsDirectory: '' });
   return { version: 1, selectedGame: 'zzz', games: { zzz: empty(), endfield: empty() } };
@@ -52,6 +54,19 @@ export class SettingsStore {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return defaultSettings();
       throw new Error('无法读取本地配置；原文件已保留。请检查 settings.json 的格式和读取权限。');
     }
+  }
+  // Environment transactions merge only their game and reject an external edit before publication.
+  saveGamePathsIfCurrent(game:GameId,expected:GamePaths,next:GamePaths):Promise<Settings>{
+    const task=this.pending.then(async()=>{
+      await assertNoLinks(this.file);let bytes:Buffer|undefined;
+      try{bytes=await fs.readFile(this.file);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+      const latest=bytes?validateSettings(JSON.parse(bytes.toString('utf8'))):defaultSettings();
+      if(!Object.hasOwn(GAMES,game)||(['xxmiRoot','gameDirectory','modsDirectory']as const).some(key=>latest.games[game][key]!==expected[key]))throw new Error('游戏路径在提交期间变化，请重新检查。');
+      const settings=mergeGamePaths(latest,game,next);if((['xxmiRoot','gameDirectory','modsDirectory']as const).every(key=>latest.games[game][key]===settings.games[game][key]))return latest;
+      const digest=bytes?createHash('sha256').update(bytes).digest('hex'):'missing';
+      await writeAtomicFile(this.file,JSON.stringify(settings,null,2),digest);return settings;
+    });
+    this.pending=task.catch(()=>{});return task;
   }
   save(input: unknown): Promise<Settings> {
     const settings = validateSettings(input);

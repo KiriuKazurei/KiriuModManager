@@ -8,7 +8,7 @@
     "src/renderer/**"
   ],
   "counts": {
-    "asynchronousMethods": 93,
+    "asynchronousMethods": 97,
     "eventSubscriptions": 1
   },
   "methods": [
@@ -32,7 +32,7 @@
       "meaning": "Native PNG/JPEG chooser; reject preserves existing image",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 238
+        "line": 247
       },
       "serviceEntry": "async (game:GameId,name:string)=>{const source=await dialog.showOpenDialog(window!,{title:'选择角色文件夹封面',properties:['openFile'],filters:[{name:'PNG / JPEG 图片',extensions:['png','jpg','jpeg']}]});if(source.canceled)return null;const result=await characterCovers.choose(game,name,source.filePaths[0]);await broadcast();return result;}",
       "serviceCalls": [
@@ -41,7 +41,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 70
+        "line": 74
       },
       "consumers": [
         {
@@ -71,7 +71,7 @@
       "meaning": "Default/custom role data URLs",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 237
+        "line": 246
       },
       "serviceEntry": "(game:GameId)=>characterCovers.read(game)",
       "serviceCalls": [
@@ -79,7 +79,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 69
+        "line": 73
       },
       "consumers": [
         {
@@ -121,7 +121,7 @@
       "meaning": "Main window; game/root/Mod revision and INI digest revalidation; Mod-local relative paths, 30 positions/page, safe local resource checks",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 168
+        "line": 175
       },
       "serviceEntry": "(game,resultId,groupId,offset)=>inspections.conflicts.details(game,resultId,groupId,offset)",
       "serviceCalls": [
@@ -129,7 +129,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 32
+        "line": 36
       },
       "consumers": [
         {
@@ -155,7 +155,7 @@
       "meaning": "Enabled-only override hash candidates, not diagnosed rendering conflict",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 222
+        "line": 231
       },
       "serviceEntry": "(game:GameId)=>ini.conflicts(game)",
       "serviceCalls": [
@@ -163,7 +163,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 88
+        "line": 92
       },
       "consumers": [],
       "status": "compatibility-only"
@@ -179,13 +179,13 @@
       "meaning": "Responsive progress polling",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 259
+        "line": 268
       },
       "serviceEntry": "async () => deployment.progress",
       "serviceCalls": [],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 52
+        "line": 56
       },
       "consumers": [
         {
@@ -219,18 +219,18 @@
       "meaning": "Create/close trusted floating window",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 197
+        "line": 206
       },
       "serviceEntry": "(visible:boolean)=>toggleFloating(visible)",
       "serviceCalls": [],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 93
+        "line": 97
       },
       "consumers": [
         {
           "file": "src/renderer/App.tsx",
-          "line": 47
+          "line": 48
         },
         {
           "file": "src/renderer/FloatingView.tsx",
@@ -255,18 +255,18 @@
       "meaning": "Atomic latest settings merge selecting game",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 200
+        "line": 209
       },
       "serviceEntry": "(game:GameId)=>chooseGame(game)",
       "serviceCalls": [],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 96
+        "line": 100
       },
       "consumers": [
         {
           "file": "src/renderer/App.tsx",
-          "line": 37
+          "line": 38
         },
         {
           "file": "src/renderer/FloatingView.tsx",
@@ -285,7 +285,7 @@
         },
         {
           "name": "mode",
-          "type": "\"gui\" | \"game\""
+          "type": "\"game\" | \"gui\""
         }
       ],
       "returnType": "Promise<Result<string>>",
@@ -295,25 +295,26 @@
       "meaning": "Validated fixed launch plan; returned request is not game-ready proof",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 201
+        "line": 210
       },
-      "serviceEntry": "async (game:GameId,mode:'gui'|'game')=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');const plan=await launchPlan(game,settings.games[game],mode);await spawnLauncher(plan);return mode==='gui'?'XXMI 打开请求已提交，请检查 Launcher 窗口。':'XXMI 启动请求已提交；不代表游戏或 Mod 已加载，请检查游戏窗口。';}",
+      "serviceEntry": "async (game:GameId,mode:'gui'|'game')=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');if(mode==='game')await environment.assertReady(game,true);const plan=await launchPlan(game,settings.games[game],mode);await spawnLauncher(plan);return mode==='gui'?'XXMI 打开请求已提交，请检查 Launcher 窗口。':'XXMI 启动请求已提交；不代表游戏或 Mod 已加载，请检查游戏窗口。';}",
       "serviceCalls": [
         "store.read",
-        "Object.hasOwn"
+        "Object.hasOwn",
+        "environment.assertReady"
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 97
+        "line": 101
       },
       "consumers": [
         {
           "file": "src/renderer/App.tsx",
-          "line": 51
+          "line": 52
         },
         {
           "file": "src/renderer/App.tsx",
-          "line": 51
+          "line": 52
         }
       ],
       "status": "connected"
@@ -338,7 +339,7 @@
       "meaning": "market loads the fixed internal home without changing the React page; update submits the saved HTTP(S) release-page URL to the system browser, without checking/downloading an app update",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 203
+        "line": 212
       },
       "serviceEntry": "async (game:GameId,kind:'market'|'update')=>{if(!Object.hasOwn(GAMES,game)||!['market','update'].includes(kind))throw new Error('网页入口无效。');if(kind==='market'){await browser().navigate('home',game);return `${GAMES[game].name}网页已载入，请在左侧获取Mod中浏览。`;}const settings=await store.read();const url=resolveWebUrl(settings.desktop?.updateUrl||'',game,kind);if(!url)throw new Error('尚未配置更新发布页。');await shell.openExternal(url);return '网页打开请求已提交到默认浏览器。';}",
       "serviceCalls": [
@@ -350,12 +351,12 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 99
+        "line": 103
       },
       "consumers": [
         {
           "file": "src/renderer/App.tsx",
-          "line": 55
+          "line": 56
         }
       ],
       "status": "connected"
@@ -371,7 +372,7 @@
       "meaning": "Request application exit",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 199
+        "line": 208
       },
       "serviceEntry": "async()=>{setImmediate(()=>app.quit());}",
       "serviceCalls": [
@@ -379,12 +380,12 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 95
+        "line": 99
       },
       "consumers": [
         {
           "file": "src/renderer/App.tsx",
-          "line": 55
+          "line": 56
         }
       ],
       "status": "connected"
@@ -405,23 +406,27 @@
       "meaning": "Only selected game process input; error without target",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 202
+        "line": 211
       },
-      "serviceEntry": "async (game:GameId)=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');const installation=await inspectXXMI(game,settings.games[game].xxmiRoot);if(!installation.installed)throw new Error('所选 loader 未安装，无法确认刷新键。');const executables=await gameExecutables(game,settings.games[game].gameDirectory);const key=await refreshKey(installation.iniPath);const sent=await sendRefresh(path.join(app.getAppPath(),'assets','refresh-helper.ps1'),executables,key.virtualKey);return `${key.name} 刷新请求已发送到所选游戏窗口（PID ${sent.pid}）。${key.defaultKey?'未找到自定义配置，使用默认 F10。':''}请在游戏中确认效果。`;}",
+      "serviceEntry": "async (game:GameId)=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');await environment.assertReady(game,true);const installation=await inspectXXMI(game,settings.games[game].xxmiRoot);if(!installation.installed)throw new Error('所选 loader 未安装，无法确认刷新键。');if(!installation.gameDirectory||path.resolve(installation.gameDirectory).toLowerCase()!==path.resolve(settings.games[game].gameDirectory).toLowerCase())throw new Error('Launcher 游戏目录与设置不一致，请先到设置的游戏环境修复。');const executables=await gameExecutables(game,settings.games[game].gameDirectory);const key=await refreshKey(installation.iniPath);const sent=await sendRefresh(path.join(app.getAppPath(),'assets','refresh-helper.ps1'),executables,key.virtualKey);return `${key.name} 刷新请求已发送到所选游戏窗口（PID ${sent.pid}）。${key.defaultKey?'未找到自定义配置，使用默认 F10。':''}请在游戏中确认效果。`;}",
       "serviceCalls": [
         "store.read",
         "Object.hasOwn",
+        "environment.assertReady",
+        "path.resolve(installation.gameDirectory).toLowerCase",
+        "path.resolve",
+        "path.resolve(settings.games[game].gameDirectory).toLowerCase",
         "path.join",
         "app.getAppPath"
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 98
+        "line": 102
       },
       "consumers": [
         {
           "file": "src/renderer/App.tsx",
-          "line": 55
+          "line": 56
         }
       ],
       "status": "connected"
@@ -437,13 +442,13 @@
       "meaning": "Restore/show main window",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 198
+        "line": 207
       },
       "serviceEntry": "async()=>showMain()",
       "serviceCalls": [],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 94
+        "line": 98
       },
       "consumers": [
         {
@@ -464,7 +469,7 @@
       "meaning": "Responsive window/tray status",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 196
+        "line": 205
       },
       "serviceEntry": "async()=>({trayAvailable:!!tray&&!tray.isDestroyed(),floatingVisible:!!floatingWindow&&floatingWindow.isVisible(),version:app.getVersion()})",
       "serviceCalls": [
@@ -474,7 +479,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 92
+        "line": 96
       },
       "consumers": [
         {
@@ -504,7 +509,7 @@
       "meaning": "Trusted main-window only; validated day/night synchronizes native title-bar overlay and background; keeps native window controls",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 172
+        "line": 179
       },
       "serviceEntry": "async theme=>{\r\n    if(theme!=='day'&&theme!=='night')throw new Error('窗口主题无效。');\r\n    const color=theme==='day'?'#e4e8f0':'#1a1e27';const symbolColor=theme==='day'?'#16181e':'#f4f1ea';\r\n    if(window&&!window.isDestroyed()){window.setBackgroundColor(color);if(process.platform!=='darwin')window.setTitleBarOverlay({color,symbolColor,height:32});}\r\n  }",
       "serviceCalls": [
@@ -514,7 +519,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 35
+        "line": 39
       },
       "consumers": [
         {
@@ -548,7 +553,7 @@
       "meaning": "Native save and overwrite confirmation; protected business/game/loader roots rejected; atomic local redacted report",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 155
+        "line": 162
       },
       "serviceEntry": "async(id,format,options)=>{\r\n    const job=await inspections.jobs.read(id,true);inspections.diagnostics.preview(job,options);\r\n    const choice=await dialog.showSaveDialog(window!,{title:'导出脱敏本地诊断报告',defaultPath:`Kiriu-${job.gameId}-diagnostics.${format==='json'?'json':'md'}`,filters:[{name:format==='json'?'JSON':'Markdown',extensions:[format==='json'?'json':'md']}],properties:['showOverwriteConfirmation']});\r\n    if(choice.canceled||!choice.filePath)return null;const current=await store.read();const forbidden=Object.values(current.games).flatMap(p=>Object.values(p)).filter(Boolean);if(forbidden.some(root=>{const relative=path.relative(path.resolve(root),path.resolve(choice.filePath!));return !relative||!relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative);}))throw new Error('报告不能写入任一游戏、Mod 或加载器目录。');\r\n    return inspections.diagnostics.save(await inspections.jobs.read(id,true),format,options,choice.filePath);\r\n  }",
       "serviceCalls": [
@@ -568,7 +573,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 25
+        "line": 29
       },
       "consumers": [
         {
@@ -598,7 +603,7 @@
       "meaning": "Revalidate result; default path aliases and IDs, whitelist log summaries; plain-text Markdown and versioned JSON model",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 154
+        "line": 161
       },
       "serviceEntry": "async(id,options)=>inspections.diagnostics.preview(await inspections.jobs.read(id,true),options)",
       "serviceCalls": [
@@ -607,7 +612,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 24
+        "line": 28
       },
       "consumers": [
         {
@@ -633,7 +638,7 @@
       "meaning": "Native directory chooser",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 276
+        "line": 287
       },
       "serviceEntry": "async (current: unknown) => {\r\n    const selected = await dialog.showOpenDialog(window!, { title: '选择目录', defaultPath: typeof current === 'string' && current ? current : undefined, properties: ['openDirectory'] });\r\n    return selected.canceled ? null : selected.filePaths[0] ?? null;\r\n  }",
       "serviceCalls": [
@@ -641,7 +646,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 49
+        "line": 53
       },
       "consumers": [
         {
@@ -655,6 +660,171 @@
         {
           "file": "src/renderer/ModDownloadsPage.tsx",
           "line": 22
+        }
+      ],
+      "status": "connected"
+    },
+    {
+      "method": "applyEnvironmentRepair",
+      "channel": "environment:apply",
+      "parameters": [
+        {
+          "name": "game",
+          "type": "\"zzz\" | \"endfield\""
+        },
+        {
+          "name": "token",
+          "type": "string"
+        }
+      ],
+      "returnType": "Promise<Result<EnvironmentRepairReceipt|null>>",
+      "resultValue": "EnvironmentRepairReceipt|null",
+      "cancel": "value:null",
+      "partialSuccess": "durable repair journal / conflict",
+      "meaning": "Native confirmation and shared queue; settings/candidate/config revalidation; byte backups and CAS; pending repair requires explicit rollback, never overwrite external edits",
+      "handler": {
+        "file": "src/main/index.ts",
+        "line": 113
+      },
+      "serviceEntry": "async(game,token)=>{const plan=environment.readPlan(game,token);const answer=await dialog.showMessageBox(window!,{type:'warning',title:plan.action==='rollback'?'确认回退环境修复':'确认游戏路径修复',message:plan.action==='rollback'?'回退此记录中的环境改动？':'提交已预览的路径修复？',detail:[GAMES[game].name,...plan.changes.map(c=>c.role+'：'+c.before+' → '+c.after),...plan.warnings].join('\\n').slice(0,16000),buttons:['取消','确认提交'],defaultId:0,cancelId:0});if(answer.response!==1)return null;try{return await environment.apply(game,token);}finally{inspections.jobs.invalidate(game);await broadcast(true);}}",
+      "serviceCalls": [
+        "environment.readPlan",
+        "dialog.showMessageBox",
+        "[GAMES[game].name,...plan.changes.map(c=>c.role+'：'+c.before+' → '+c.after),...plan.warnings].join('\\n').slice",
+        "[GAMES[game].name,...plan.changes.map(c=>c.role+'：'+c.before+' → '+c.after),...plan.warnings].join",
+        "plan.changes.map",
+        "environment.apply",
+        "inspections.jobs.invalidate"
+      ],
+      "preload": {
+        "file": "src/preload/index.ts",
+        "line": 9
+      },
+      "consumers": [
+        {
+          "file": "src/renderer/EnvironmentPanel.tsx",
+          "line": 21
+        }
+      ],
+      "status": "connected"
+    },
+    {
+      "method": "checkGameEnvironment",
+      "channel": "environment:check",
+      "parameters": [
+        {
+          "name": "game",
+          "type": "\"zzz\" | \"endfield\""
+        },
+        {
+          "name": "mode",
+          "type": "\"quick\" | \"discover\""
+        }
+      ],
+      "returnType": "Promise<Result<InspectionJob>>",
+      "resultValue": "InspectionJob",
+      "cancel": "none",
+      "partialSuccess": "incomplete candidates / unknown issues",
+      "meaning": "Main-window saved paths; quick known-file checks or bounded cancelable discovery job; no configuration writes",
+      "handler": {
+        "file": "src/main/index.ts",
+        "line": 110
+      },
+      "serviceEntry": "(game,mode)=>environment.start(game,mode)",
+      "serviceCalls": [
+        "environment.start"
+      ],
+      "preload": {
+        "file": "src/preload/index.ts",
+        "line": 6
+      },
+      "consumers": [
+        {
+          "file": "src/renderer/EnvironmentPanel.tsx",
+          "line": 13
+        },
+        {
+          "file": "src/renderer/EnvironmentPanel.tsx",
+          "line": 21
+        }
+      ],
+      "status": "connected"
+    },
+    {
+      "method": "chooseGameInstallation",
+      "channel": "environment:choose",
+      "parameters": [
+        {
+          "name": "game",
+          "type": "\"zzz\" | \"endfield\""
+        },
+        {
+          "name": "kind",
+          "type": "\"game\" | \"loader\""
+        }
+      ],
+      "returnType": "Promise<Result<InspectionJob|null>>",
+      "resultValue": "InspectionJob|null",
+      "cancel": "value:null",
+      "partialSuccess": "incomplete candidates / unknown issues",
+      "meaning": "Main-window native directory chooser; same bounded discovery; no arbitrary EXE or automatic save",
+      "handler": {
+        "file": "src/main/index.ts",
+        "line": 111
+      },
+      "serviceEntry": "async(game,kind)=>{if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');if(!['game','loader'].includes(kind))throw new Error('安装位置类型无效。');const choice=await dialog.showOpenDialog(window!,{title:kind==='game'?'选择游戏安装目录':'选择 XXMI 外层安装根',properties:['openDirectory']});return choice.canceled||!choice.filePaths[0]?null:environment.start(game,'discover',{kind,directory:choice.filePaths[0]});}",
+      "serviceCalls": [
+        "Object.hasOwn",
+        "['game','loader'].includes",
+        "dialog.showOpenDialog",
+        "environment.start"
+      ],
+      "preload": {
+        "file": "src/preload/index.ts",
+        "line": 7
+      },
+      "consumers": [
+        {
+          "file": "src/renderer/EnvironmentPanel.tsx",
+          "line": 20
+        }
+      ],
+      "status": "connected"
+    },
+    {
+      "method": "prepareEnvironmentRepair",
+      "channel": "environment:prepare",
+      "parameters": [
+        {
+          "name": "game",
+          "type": "\"zzz\" | \"endfield\""
+        },
+        {
+          "name": "request",
+          "type": "EnvironmentRepairRequest"
+        }
+      ],
+      "returnType": "Promise<Result<EnvironmentRepairPreview>>",
+      "resultValue": "EnvironmentRepairPreview",
+      "cancel": "none",
+      "partialSuccess": "unsupported schema rejects",
+      "meaning": "Owned expiring report/candidate or repair ID; whitelist save/sync-game/sync-mods preview; public values only, Mod root retained",
+      "handler": {
+        "file": "src/main/index.ts",
+        "line": 112
+      },
+      "serviceEntry": "(game,request)=>environment.prepare(game,request)",
+      "serviceCalls": [
+        "environment.prepare"
+      ],
+      "preload": {
+        "file": "src/preload/index.ts",
+        "line": 8
+      },
+      "consumers": [
+        {
+          "file": "src/renderer/EnvironmentPanel.tsx",
+          "line": 19
         }
       ],
       "status": "connected"
@@ -679,7 +849,7 @@
       "meaning": "Only Mod-local INI paths",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 219
+        "line": 228
       },
       "serviceEntry": "(game:GameId,id:string)=>ini.files(game,id)",
       "serviceCalls": [
@@ -687,7 +857,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 85
+        "line": 89
       },
       "consumers": [
         {
@@ -721,7 +891,7 @@
       "meaning": "Encoding/BOM/newline/digest/key identities",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 220
+        "line": 229
       },
       "serviceEntry": "(game:GameId,id:string,file:string)=>ini.read(game,id,file)",
       "serviceCalls": [
@@ -729,7 +899,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 86
+        "line": 90
       },
       "consumers": [
         {
@@ -775,7 +945,7 @@
       "meaning": "Digest protection; encoded 4MiB bound before backup/write",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 221
+        "line": 230
       },
       "serviceEntry": "(game:GameId,id:string,file:string,digest:string,edit)=>ini.save(game,id,file,digest,edit)",
       "serviceCalls": [
@@ -783,7 +953,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 87
+        "line": 91
       },
       "consumers": [
         {
@@ -809,7 +979,7 @@
       "meaning": "Responsive read cancellation; no business file writes",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 153
+        "line": 160
       },
       "serviceEntry": "async id=>inspections.jobs.cancel(id)",
       "serviceCalls": [
@@ -817,7 +987,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 23
+        "line": 27
       },
       "consumers": [
         {
@@ -851,7 +1021,7 @@
       "meaning": "Main window; effective enabled INIs; type/hash groups, static context only, bounded scan without mutating index",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 151
+        "line": 158
       },
       "serviceEntry": "game=>inspections.start('conflicts',game)",
       "serviceCalls": [
@@ -859,7 +1029,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 21
+        "line": 25
       },
       "consumers": [
         {
@@ -889,7 +1059,7 @@
       "meaning": "Main window; saved local context; bounded cancelable read-only job, no scan migrations or network probing",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 149
+        "line": 156
       },
       "serviceEntry": "game=>inspections.start('diagnostics',game)",
       "serviceCalls": [
@@ -897,7 +1067,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 19
+        "line": 23
       },
       "consumers": [
         {
@@ -923,7 +1093,7 @@
       "meaning": "Main window; bounded logical-byte inventory; invalid protection or uncertain ownership prevents cleanup",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 150
+        "line": 157
       },
       "serviceEntry": "game=>inspections.start('inventory',game)",
       "serviceCalls": [
@@ -931,7 +1101,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 20
+        "line": 24
       },
       "consumers": [
         {
@@ -957,7 +1127,7 @@
       "meaning": "Responsive owned in-memory job status; root and external evidence checks, expiring bounded cache",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 152
+        "line": 159
       },
       "serviceEntry": "id=>inspections.jobs.read(id)",
       "serviceCalls": [
@@ -965,7 +1135,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 22
+        "line": 26
       },
       "consumers": [
         {
@@ -995,7 +1165,7 @@
       "meaning": "Owned game/Mod/recovery/storage references only; no renderer-provided absolute path",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 169
+        "line": 176
       },
       "serviceEntry": "async(game,reference)=>{shell.showItemInFolder(await inspections.location(game,reference));}",
       "serviceCalls": [
@@ -1004,9 +1174,13 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 33
+        "line": 37
       },
       "consumers": [
+        {
+          "file": "src/renderer/EnvironmentPanel.tsx",
+          "line": 31
+        },
         {
           "file": "src/renderer/RecoveryPage.tsx",
           "line": 22
@@ -1046,7 +1220,7 @@
       "meaning": "Owned task actions in the task game; retry-download creates a new task using the currently saved root for new installs, while directed updates keep updateTarget.root; retry-binding keeps the existing task/root; install-current requires native root confirmation; new installs require F01 preflight, retry-install is for directed updates",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 180
+        "line": 187
       },
       "serviceEntry": "async(id,action,destinations)=>{if(action==='retry-install'&&!browser().status().downloads.find(t=>t.id===id)?.updateTarget)throw new Error('新 Mod 请使用下载页的统一预检安装。');return browser().downloadAction(id,action,destinations);}",
       "serviceCalls": [
@@ -1056,7 +1230,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 39
+        "line": 43
       },
       "consumers": [
         {
@@ -1082,7 +1256,7 @@
       "meaning": "Verify owned cache and preview package entries/role folders, with target/config changes for directed updates; task stage may change during validation, but no Mod install is committed",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 181
+        "line": 188
       },
       "serviceEntry": "async id=>browser().installPlan(id)",
       "serviceCalls": [
@@ -1090,7 +1264,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 40
+        "line": 44
       },
       "consumers": [
         {
@@ -1116,7 +1290,7 @@
       "meaning": "Shared history and selected-game fixed home/reload; external HTTPS opens only after explicit trusted-toolbar action",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 179
+        "line": 186
       },
       "serviceEntry": "async action=>browser().navigate(action)",
       "serviceCalls": [
@@ -1124,7 +1298,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 38
+        "line": 42
       },
       "consumers": [
         {
@@ -1145,7 +1319,7 @@
       "meaning": "Responsive selected-game browser/download state; both-game tasks retain their game/root; owned cache and interruption records; no cookie values exposed",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 178
+        "line": 185
       },
       "serviceEntry": "async()=>browser().status()",
       "serviceCalls": [
@@ -1153,7 +1327,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 37
+        "line": 41
       },
       "consumers": [
         {
@@ -1191,7 +1365,7 @@
       "meaning": "Trusted main-window only; one shared sandbox GameBanana view/session/history, game switch loads fixed home; clamped bounds; no arbitrary URL",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 177
+        "line": 184
       },
       "serviceEntry": "async(game,bounds)=>browser().setView(game,bounds)",
       "serviceCalls": [
@@ -1199,7 +1373,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 36
+        "line": 40
       },
       "consumers": [
         {
@@ -1237,13 +1411,13 @@
       "meaning": "Native confirmation; revalidate source/root/library/cache/space and incoming hash; newOnly per-entry recoverable commit; default disabled; download receipt persists",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 126
+        "line": 133
       },
       "serviceEntry": "(game,token,accept)=>confirmImport(game,token,accept)",
       "serviceCalls": [],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 9
+        "line": 13
       },
       "consumers": [
         {
@@ -1273,7 +1447,7 @@
       "meaning": "Main-window session only; abort remaining commit items or remove proven owned cache; no automatic restart install",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 127
+        "line": 134
       },
       "serviceEntry": "(game,id)=>mods.imports.discard(game,id)",
       "serviceCalls": [
@@ -1281,7 +1455,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 10
+        "line": 14
       },
       "consumers": [
         {
@@ -1327,7 +1501,7 @@
       "meaning": "Main-window owned candidate file list; 100 file records per page; no arbitrary paths",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 125
+        "line": 132
       },
       "serviceEntry": "(game,id,entry,offset)=>mods.imports.files(game,id,entry,offset)",
       "serviceCalls": [
@@ -1335,7 +1509,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 8
+        "line": 12
       },
       "consumers": [
         {
@@ -1365,7 +1539,7 @@
       "meaning": "Main-window native local sources or pinned download-task ID; cancelable shared job; owned snapshot cache only; source/root/binding evidence and strict tree SHA256",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 118
+        "line": 125
       },
       "serviceEntry": "async(game,source)=>{\r\n    if(!source||!['folder','archive','download'].includes(source.kind))throw new Error('导入来源类型无效。');\r\n    if(source.kind==='download'){const input=browser().importSource(source.taskId);if(input.gameId!==game)throw new Error('下载任务与所选游戏不匹配。');return inspections.jobs.start('mod-import',game,(await store.read()).games[game],async(signal,progress)=>{try{return await mods.imports.prepareDownload(game,input,signal,progress);}catch(error){if(!signal.aborted)await browser().failImport(source.taskId,(error as Error).message).catch(()=>{});throw error;}},undefined,JSON.stringify(source));}\r\n    const choice=await selectSource(source.kind,true);if(choice.canceled||!choice.filePaths.length)return null;\r\n    return inspections.jobs.start('mod-import',game,(await store.read()).games[game],(signal,progress)=>mods.imports.prepareLocal(game,choice.filePaths,signal,progress),undefined,JSON.stringify(choice.filePaths));\r\n  }",
       "serviceCalls": [
@@ -1381,7 +1555,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 6
+        "line": 10
       },
       "consumers": [
         {
@@ -1419,7 +1593,7 @@
       "meaning": "Owned expiring session; validated subset, relative role folders and names; duplicate default skip requires explicit separate copy; no overwrite",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 124
+        "line": 131
       },
       "serviceEntry": "async(game,id,choices)=>inspections.jobs.start('mod-import',game,(await store.read()).games[game],(signal,progress)=>mods.imports.revise(game,id,choices,signal,progress),undefined,JSON.stringify([id,choices]))",
       "serviceCalls": [
@@ -1430,7 +1604,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 7
+        "line": 11
       },
       "consumers": [
         {
@@ -1472,7 +1646,7 @@
       "meaning": "Selected stable IDs; per-item success/errors; unresolved mutual enable choices make no file changes",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 232
+        "line": 241
       },
       "serviceEntry": "(game,ids,operation,choices,confirmation)=>mods.batch(game,ids,operation,choices,confirmation)",
       "serviceCalls": [
@@ -1480,7 +1654,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 61
+        "line": 65
       },
       "consumers": [
         {
@@ -1514,7 +1688,7 @@
       "meaning": "Native PNG/JPEG/WebP/GIF chooser",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 255
+        "line": 264
       },
       "serviceEntry": "async (game:GameId,id:string) => {\r\n    const source=await dialog.showOpenDialog(window!,{title:'选择 Mod 预览图',properties:['openFile'],filters:[{name:'本地图片',extensions:['png','jpg','jpeg','webp','gif']}]});\r\n    return source.canceled?null:mods.setCover(game,id,source.filePaths[0]);\r\n  }",
       "serviceCalls": [
@@ -1523,7 +1697,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 71
+        "line": 75
       },
       "consumers": [
         {
@@ -1553,7 +1727,7 @@
       "meaning": "Mod image data URL",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 236
+        "line": 245
       },
       "serviceEntry": "(game: GameId,id: string) => mods.cover(game,id)",
       "serviceCalls": [
@@ -1561,7 +1735,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 68
+        "line": 72
       },
       "consumers": [
         {
@@ -1595,7 +1769,7 @@
       "meaning": "Native confirm; move out of library with recovery copy",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 250
+        "line": 259
       },
       "serviceEntry": "async (game,id,confirmation) => {\r\n    const snapshot=await mods.scan(game); const target=snapshot.mods.find(mod=>mod.id===id); if(!target) throw new Error('Mod 不存在，请重新扫描。');\r\n    const choice=await dialog.showMessageBox(window!,{type:'warning',title:'移到恢复区',message:`移除“${target.name}”？`,detail:'文件会从 loader 读取目录移除，恢复副本保存在管理器数据目录的 removed 文件夹。不会静默永久删除。',buttons:['取消','移到恢复区'],defaultId:0,cancelId:0});\r\n    return choice.response===1?mods.delete(game,id,confirmation):null;\r\n  }",
       "serviceCalls": [
@@ -1606,7 +1780,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 67
+        "line": 71
       },
       "consumers": [
         {
@@ -1636,7 +1810,7 @@
       "meaning": "Read installed manifests; final projected states and manual declarations; root/content/state/version scoped expiring token",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 216
+        "line": 225
       },
       "serviceEntry": "(game,request)=>mods.dependencyCheck(game,request)",
       "serviceCalls": [
@@ -1644,7 +1818,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 58
+        "line": 62
       },
       "consumers": [
         {
@@ -1674,7 +1848,7 @@
       "meaning": "Delete group only; keep member content and state",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 234
+        "line": 243
       },
       "serviceEntry": "(game,id)=>mods.deleteExclusiveGroup(game,id)",
       "serviceCalls": [
@@ -1682,7 +1856,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 63
+        "line": 67
       },
       "consumers": [
         {
@@ -1728,7 +1902,7 @@
       "meaning": "Root/game-scoped manual disjoint groups; multiple active members require explicit choice",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 233
+        "line": 242
       },
       "serviceEntry": "(game,id,name,modIds,enabledId,confirmation)=>mods.saveExclusiveGroup(game,id,name,modIds,enabledId,confirmation)",
       "serviceCalls": [
@@ -1736,7 +1910,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 62
+        "line": 66
       },
       "consumers": [
         {
@@ -1774,7 +1948,7 @@
       "meaning": "Metadata group only; no directory created",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 239
+        "line": 248
       },
       "serviceEntry": "(game: GameId,kind: 'category'|'character'|'appearance',name: string) => mods.addGroup(game,kind,name)",
       "serviceCalls": [
@@ -1782,7 +1956,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 72
+        "line": 76
       },
       "consumers": [
         {
@@ -1812,7 +1986,7 @@
       "meaning": "Compatibility native default-plan confirmation through ImportPlanner; complex choices require main import-preflight UI; new entries disabled",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 244
+        "line": 253
       },
       "serviceEntry": "async (game: GameId,kind: 'folder'|'archive') => {\r\n    const source=await selectSource(kind,true); if(source.canceled) return {library:await mods.scan(game),importedIds:[],errors:[],canceled:true}; return legacyImport(game,source.filePaths);\r\n  }",
       "serviceCalls": [
@@ -1820,7 +1994,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 65
+        "line": 69
       },
       "consumers": [],
       "status": "compatibility-only"
@@ -1853,7 +2027,7 @@
       "meaning": "Validated toggle/rename/classify/metadata/provenance/favorite/tags/requirements; metadata does not move files, classify does; shared dependency/exclusivity and collision checks",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 231
+        "line": 240
       },
       "serviceEntry": "(game,id,operation,confirmation) => mods.operate(game,id,operation,undefined,confirmation)",
       "serviceCalls": [
@@ -1861,7 +2035,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 57
+        "line": 61
       },
       "consumers": [
         {
@@ -1931,7 +2105,7 @@
       "meaning": "Revalidate saved candidate/root/content revision and native download confirmation; pinned replacement task, no immediate install",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 218
+        "line": 227
       },
       "serviceEntry": "async(game,id,candidate)=>{const prepared=await modUpdates.prepare(game,id,candidate);const record=(await mods.context(game,id)).record!;const choice=await dialog.showMessageBox(window!,{type:'question',title:'下载 Mod 更新候选',message:'下载候选文件 '+prepared.binding.remote.fileName+'？',detail:'目标：'+record.relativePath+'\\n声明版本：'+(prepared.binding.version||'未知')+'\\n下载后仍需在下载页面确认替换，文件不会自动升级。',buttons:['取消','下载候选'],defaultId:0,cancelId:0});return choice.response===1?browser().queueUpdate(prepared.binding,prepared.target):null;}",
       "serviceCalls": [
@@ -1942,7 +2116,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 60
+        "line": 64
       },
       "consumers": [
         {
@@ -1980,7 +2154,7 @@
       "meaning": "Native selected content; retain old recovery copy/identity/user cover",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 247
+        "line": 256
       },
       "serviceEntry": "async (game,id,kind,confirmation) => {\r\n    const source=await selectSource(kind,false); return source.canceled?null:mods.replace(game,id,source.filePaths[0],confirmation);\r\n  }",
       "serviceCalls": [
@@ -1988,7 +2162,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 66
+        "line": 70
       },
       "consumers": [
         {
@@ -2018,7 +2192,7 @@
       "meaning": "Fresh saved-root disk scan with stable-ID registry maintenance; metadata inference only for newly discovered records",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 230
+        "line": 239
       },
       "serviceEntry": "(game: GameId) => mods.scan(game)",
       "serviceCalls": [
@@ -2026,7 +2200,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 56
+        "line": 60
       },
       "consumers": [
         {
@@ -2084,7 +2258,7 @@
       "meaning": "Read saved safe HTTP(S) source by owned Mod ID; submit browser request",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 235
+        "line": 244
       },
       "serviceEntry": "async(game,id)=>{const url=await mods.sourceUrl(game,id);await shell.openExternal(url);return '来源网页打开请求已提交。';}",
       "serviceCalls": [
@@ -2093,7 +2267,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 64
+        "line": 68
       },
       "consumers": [
         {
@@ -2123,7 +2297,7 @@
       "meaning": "Explicit selected bound GameBanana checks, max three concurrent, no automatic latest variant selection",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 217
+        "line": 226
       },
       "serviceEntry": "(game,ids)=>modUpdates.check(game,ids)",
       "serviceCalls": [
@@ -2131,7 +2305,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 59
+        "line": 63
       },
       "consumers": [
         {
@@ -2165,7 +2339,7 @@
       "meaning": "Validated expiring plan; explicit incomplete draft, no fake local IDs; durable preset/nonactive-profile publish; current states/INI/organization retained",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 143
+        "line": 150
       },
       "serviceEntry": "(game,token,options)=>presetManifests.commit(game,token,options)",
       "serviceCalls": [
@@ -2173,7 +2347,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 17
+        "line": 21
       },
       "consumers": [
         {
@@ -2203,7 +2377,7 @@
       "meaning": "Native save; validated fixed export preview; all game/data roots protected; atomic JSON or whitelist ZIP; no Mod resources or credentials",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 137
+        "line": 144
       },
       "serviceEntry": "async(game,token)=>{const plan=presetManifests.readExport(game,token),extension=plan.manifest.profile?'zip':'json';const choice=await dialog.showSaveDialog(window!,{title:'导出预设清单',defaultPath:plan.preview.name+(plan.manifest.profile?'.kmm-profile.zip':'.kmm-preset.json'),filters:[{name:'Kiriu 预设清单',extensions:[extension]}],properties:['showOverwriteConfirmation']});return choice.canceled||!choice.filePath?null:presetManifests.export(game,token,choice.filePath);}",
       "serviceCalls": [
@@ -2213,7 +2387,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 14
+        "line": 18
       },
       "consumers": [
         {
@@ -2247,7 +2421,7 @@
       "meaning": "Main-window cancelable read-only job; website Mod/file IDs and canonical download links; whole Mod tree SHA256; optional captured INI projection",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 136
+        "line": 143
       },
       "serviceEntry": "async(game,id,includeProfile)=>inspections.jobs.start('preset-export',game,(await store.read()).games[game],(signal,progress)=>presetManifests.prepareExport(game,id,includeProfile,signal,progress),undefined,JSON.stringify([id,includeProfile]))",
       "serviceCalls": [
@@ -2258,7 +2432,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 13
+        "line": 17
       },
       "consumers": [
         {
@@ -2288,7 +2462,7 @@
       "meaning": "Native selected local JSON/ZIP or owned incomplete preset; no network or activation; bounded safe schema and exact-hash/site suggestions",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 138
+        "line": 145
       },
       "serviceEntry": "async(game,draftId)=>{\r\n    let file:string|undefined;if(!draftId){const choice=await dialog.showOpenDialog(window!,{title:'导入预设清单',properties:['openFile'],filters:[{name:'Kiriu 预设清单／配置',extensions:['json','zip']}]});if(choice.canceled||!choice.filePaths[0])return null;file=choice.filePaths[0];}\r\n    return inspections.jobs.start('preset-import',game,(await store.read()).games[game],(signal,progress)=>presetManifests.prepareImport(game,file,draftId,signal,progress),undefined,JSON.stringify([file,draftId]));\r\n  }",
       "serviceCalls": [
@@ -2300,7 +2474,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 15
+        "line": 19
       },
       "consumers": [
         {
@@ -2338,7 +2512,7 @@
       "meaning": "Owned match session plus native folder/archive chooser; both-game/data overlap denied; new imported replacements disabled; does not apply preset",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 144
+        "line": 151
       },
       "serviceEntry": "async(game,id,kind)=>{\r\n    await presetManifests.session(game,id);if(!['folder','archive'].includes(kind))throw new Error('替代来源类型无效。');const choice=await dialog.showOpenDialog(window!,{title:'导入本地替代 Mod（默认停用）',properties:[kind==='folder'?'openDirectory':'openFile'],...(kind==='archive'?{filters:[{name:'Mod 压缩包',extensions:['zip','7z','rar']}]}:{})});\r\n    if(choice.canceled||!choice.filePaths.length)return {library:await mods.scan(game),importedIds:[],errors:[],canceled:true};await presetManifests.session(game,id);\r\n    const settings=await store.read(),protectedRoots=[app.getPath('userData'),...Object.values(settings.games).map(paths=>paths.modsDirectory).filter(Boolean)];if(choice.filePaths.some(source=>protectedRoots.some(root=>isInside(root,source)||isInside(source,root))))throw new Error('替代来源不能与数据目录或任一游戏 Mod 库重叠。');return legacyImport(game,choice.filePaths);\r\n  }",
       "serviceCalls": [
@@ -2356,7 +2530,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 18
+        "line": 22
       },
       "consumers": [
         {
@@ -2390,7 +2564,7 @@
       "meaning": "Owned game/root session; one-to-one local IDs; explicit different/unknown-hash replacement acceptance; independent INI resource compatibility",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 142
+        "line": 149
       },
       "serviceEntry": "async(game,id,choices)=>inspections.jobs.start('preset-import',game,(await store.read()).games[game],(signal,progress)=>presetManifests.revise(game,id,choices,signal,progress),undefined,JSON.stringify([id,choices]))",
       "serviceCalls": [
@@ -2401,7 +2575,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 16
+        "line": 20
       },
       "consumers": [
         {
@@ -2435,7 +2609,7 @@
       "meaning": "Merge selected existing Mod IDs/current states into an existing preset without replacing other members",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 206
+        "line": 215
       },
       "serviceEntry": "(game,id,modIds)=>business.addModsToPreset(game,id,modIds)",
       "serviceCalls": [
@@ -2443,7 +2617,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 75
+        "line": 79
       },
       "consumers": [
         {
@@ -2481,7 +2655,7 @@
       "meaning": "Compatibility wrapper around the current planner and native confirmation; unresolved missing/exclusive/other blockers do not commit; dependency blocks return an error; applied counts changed plus unchanged, unlike commitPresetApply",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 208
+        "line": 217
       },
       "serviceEntry": "async(game,id,choices,confirmation)=>{const plan=await business.presetPlanner.prepare(game,id,choices);if(plan.dependency.issues.some(issue=>issue.severity==='block'))throw new DependencyError(plan.dependency);if(!plan.canApply)return {library:await mods.scan(game),applied:0,conflicts:plan.conflicts,issues:plan.blockers};const result=await confirmPreset(game,plan.token,confirmation);return {library:result?.library||await mods.scan(game),applied:result?(result.applied+result.unchanged):0,conflicts:[],issues:result?[]:['已取消应用预设。']};}",
       "serviceCalls": [
@@ -2491,7 +2665,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 77
+        "line": 81
       },
       "consumers": [],
       "status": "compatibility-only"
@@ -2520,13 +2694,13 @@
       "meaning": "Main-window native confirmation; expiring preview and dependency confirmation; restricted v2 directory-only commit, no INI writes",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 135
+        "line": 142
       },
       "serviceEntry": "(game,token,confirmation)=>confirmPreset(game,token,confirmation)",
       "serviceCalls": [],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 12
+        "line": 16
       },
       "consumers": [
         {
@@ -2556,7 +2730,7 @@
       "meaning": "Delete preset association and clear its active reference if selected; retain current Mod/INI bytes and stored profile revisions",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 207
+        "line": 216
       },
       "serviceEntry": "(game:GameId,id:string)=>business.deletePreset(game,id)",
       "serviceCalls": [
@@ -2564,7 +2738,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 76
+        "line": 80
       },
       "consumers": [
         {
@@ -2590,7 +2764,7 @@
       "meaning": "Current root-scoped game presets",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 204
+        "line": 213
       },
       "serviceEntry": "(game:GameId)=>business.presets(game)",
       "serviceCalls": [
@@ -2598,7 +2772,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 73
+        "line": 77
       },
       "consumers": [
         {
@@ -2644,7 +2818,7 @@
       "meaning": "Main-window cancelable read-only job; fixed saved preset/root and directory/version evidence; complete outside dependency/exclusive projection",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 129
+        "line": 136
       },
       "serviceEntry": "async(game,id,choices,excluded)=>inspections.jobs.start('preset-preview',game,(await store.read()).games[game],async(signal,progress)=>{progress('核对预设最终启停与联动');return business.presetPlanner.prepare(game,id,choices,excluded,signal);},undefined,JSON.stringify([id,choices,excluded]))",
       "serviceCalls": [
@@ -2655,7 +2829,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 11
+        "line": 15
       },
       "consumers": [
         {
@@ -2693,7 +2867,7 @@
       "meaning": "Create/update validated stable-ID members; null members means current snapshot",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 205
+        "line": 214
       },
       "serviceEntry": "(game:GameId,id:string|null,name:string,members:Record<string,boolean>|null)=>business.savePreset(game,id,name,members)",
       "serviceCalls": [
@@ -2701,7 +2875,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 74
+        "line": 78
       },
       "consumers": [
         {
@@ -2737,7 +2911,7 @@
         },
         {
           "name": "strategy",
-          "type": "\"cancel\" | \"backup\" | \"save\""
+          "type": "\"save\" | \"cancel\" | \"backup\""
         },
         {
           "name": "confirmation",
@@ -2751,7 +2925,7 @@
       "meaning": "Confirmed dirty handling and dependency acceptance; complete backup plus recoverable v2 INI/move/registry commit",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 214
+        "line": 223
       },
       "serviceEntry": "(game,token,strategy,confirmation)=>business.profiles.apply(game,token,strategy,confirmation)",
       "serviceCalls": [
@@ -2759,7 +2933,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 83
+        "line": 87
       },
       "consumers": [
         {
@@ -2797,7 +2971,7 @@
       "meaning": "Capture saved disk INIs to immutable revisions; preserve saved members or capture current states for a new preset; refresh active reference only when none exists or recapturing that active preset; 4 MiB/file and 64 MiB total",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 210
+        "line": 219
       },
       "serviceEntry": "(game,id,name,scope)=>business.profiles.capture(game,id,name,scope)",
       "serviceCalls": [
@@ -2805,7 +2979,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 79
+        "line": 83
       },
       "consumers": [
         {
@@ -2839,7 +3013,7 @@
       "meaning": "Copy stored immutable profile without capturing current active files",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 211
+        "line": 220
       },
       "serviceEntry": "(game,id,name)=>business.profiles.duplicate(game,id,name)",
       "serviceCalls": [
@@ -2847,7 +3021,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 80
+        "line": 84
       },
       "consumers": [
         {
@@ -2875,7 +3049,7 @@
         },
         {
           "name": "strategy",
-          "type": "\"backup\" | \"save\" | undefined"
+          "type": "\"save\" | \"backup\" | undefined"
         }
       ],
       "returnType": "Promise<Result<ProfileApplyPlan>>",
@@ -2885,7 +3059,7 @@
       "meaning": "Short-lived switch preview bound to current profile, file digests, library states and root",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 213
+        "line": 222
       },
       "serviceEntry": "(game,id,choices,strategy)=>business.profiles.prepare(game,id,choices,strategy)",
       "serviceCalls": [
@@ -2893,7 +3067,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 82
+        "line": 86
       },
       "consumers": [
         {
@@ -2931,7 +3105,7 @@
       "meaning": "Read-only owned captured INI; verify manifest and blob digest before returning text",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 215
+        "line": 224
       },
       "serviceEntry": "(game,id,file)=>business.profiles.read(game,id,file)",
       "serviceCalls": [
@@ -2939,7 +3113,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 84
+        "line": 88
       },
       "consumers": [
         {
@@ -2969,7 +3143,7 @@
       "meaning": "List member-local INI candidates with 2048-file budget; files are shared until explicitly captured",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 209
+        "line": 218
       },
       "serviceEntry": "(game,id)=>business.profiles.scope(game,id)",
       "serviceCalls": [
@@ -2977,7 +3151,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 78
+        "line": 82
       },
       "consumers": [
         {
@@ -3007,7 +3181,7 @@
       "meaning": "Hash active disk files and compare flags on demand; report stale content revisions and shared files",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 212
+        "line": 221
       },
       "serviceEntry": "(game,id)=>business.profiles.status(game,id)",
       "serviceCalls": [
@@ -3015,7 +3189,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 81
+        "line": 85
       },
       "consumers": [
         {
@@ -3053,7 +3227,7 @@
       "meaning": "Native permanent-delete confirmation; durable owner/phase before staging, queue-coordinated background cleanup; no auto startup continuation",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 166
+        "line": 173
       },
       "serviceEntry": "async(game,token)=>{const plan=inspections.storage.readPlan(game,token);const choice=await dialog.showMessageBox(window!,{type:'warning',title:'永久清理所选副本',message:`永久清理 ${plan.items.length} 个副本？`,detail:plan.items.map(i=>`${i.name} · ${i.kind} · ${i.root} · ${i.bytes} 逻辑字节`).concat(plan.warnings).join('\\n').slice(0,16000),buttons:['取消','永久清理所选副本'],defaultId:0,cancelId:0});if(choice.response!==1)return null;const job=await inspections.storage.begin(game,token);void mutation(async()=>{await operationLog.run('recovery:cleanup-run',[game,job.id],()=>inspections.storage.manage(game,job.id,'continue'));await broadcast();}).catch(()=>{});return job;}",
       "serviceCalls": [
@@ -3070,7 +3244,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 30
+        "line": 34
       },
       "consumers": [
         {
@@ -3104,13 +3278,13 @@
       "meaning": "Main window native scope confirmation; shared planner revalidates source/target/context and uses existing recoverable backend; backup before overwrite",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 164
+        "line": 171
       },
       "serviceEntry": "(game,token,confirmation)=>confirmRestore(game,token,confirmation)",
       "serviceCalls": [],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 28
+        "line": 32
       },
       "consumers": [
         {
@@ -3144,7 +3318,7 @@
       "meaning": "Responsive read/cancel, explicit native continue/undo; only complete undeleted items undoable; no arbitrary path deletion",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 167
+        "line": 174
       },
       "serviceEntry": "async(game,id,action)=>{if(action==='read'||action==='cancel')return inspections.storage.manage(game,id,action);if(!['continue','undo'].includes(action))throw new Error('清理操作无效。');return mutation(async()=>{const job=await inspections.storage.manage(game,id,'read');const choice=await dialog.showMessageBox(window!,{type:'warning',title:action==='continue'?'继续永久清理':'撤回完整副本',message:action==='continue'?'继续删除清理记录中的剩余内容？':'将尚未开始永久删除的完整副本撤回恢复区？',detail:job.items.map(i=>`${i.name} · ${i.phase} · ${i.message}`).join('\\n').slice(0,16000),buttons:['取消',action==='continue'?'继续永久清理':'撤回完整副本'],defaultId:0,cancelId:0});if(choice.response!==1)return null;if(action==='undo')return inspections.storage.manage(game,id,action);void mutation(async()=>{await operationLog.run('recovery:cleanup-run',[game,id],()=>inspections.storage.manage(game,id,'continue'));await broadcast();}).catch(()=>{});return {...job,phase:'working' as const};});}",
       "serviceCalls": [
@@ -3159,7 +3333,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 31
+        "line": 35
       },
       "consumers": [
         {
@@ -3201,7 +3375,7 @@
       "meaning": "Complete current-game content/settings/metadata/presets/role image snapshot",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 224
+        "line": 233
       },
       "serviceEntry": "(game:GameId,name:string)=>business.createBackup(game,name)",
       "serviceCalls": [
@@ -3209,7 +3383,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 90
+        "line": 94
       },
       "consumers": [
         {
@@ -3235,7 +3409,7 @@
       "meaning": "Current game recovery records",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 223
+        "line": 232
       },
       "serviceEntry": "(game:GameId)=>business.recovery.list(game)",
       "serviceCalls": [
@@ -3243,7 +3417,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 89
+        "line": 93
       },
       "consumers": [],
       "status": "compatibility-only"
@@ -3268,7 +3442,7 @@
       "meaning": "IDs only, max 100 complete owned backups; protection/reference/task guards and expiring evidence token",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 165
+        "line": 172
       },
       "serviceEntry": "(game,ids)=>inspections.storage.prepare(game,ids)",
       "serviceCalls": [
@@ -3276,7 +3450,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 29
+        "line": 33
       },
       "consumers": [
         {
@@ -3306,7 +3480,7 @@
       "meaning": "Shared RestorePlanner read job: exact directory scope, content evidence, dependency and volume estimate; short-lived token",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 162
+        "line": 169
       },
       "serviceEntry": "(game,id)=>inspections.start('restore-preview',game,id)",
       "serviceCalls": [
@@ -3314,7 +3488,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 27
+        "line": 31
       },
       "consumers": [
         {
@@ -3348,7 +3522,7 @@
       "meaning": "Queued versioned atomic sidecar; invalid existing protection retained and cleanup denied",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 161
+        "line": 168
       },
       "serviceEntry": "(game,ids,value)=>inspections.storage.setProtection(game,ids,value)",
       "serviceCalls": [
@@ -3356,7 +3530,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 26
+        "line": 30
       },
       "consumers": [
         {
@@ -3394,7 +3568,7 @@
       "meaning": "Native confirm; preserve overwritten files; restore scope and game isolation",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 225
+        "line": 234
       },
       "serviceEntry": "async(game,id,confirmation)=>{const plan=await business.restorePlanner.prepare(game,id);return confirmRestore(game,plan.token,confirmation);}",
       "serviceCalls": [
@@ -3402,7 +3576,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 91
+        "line": 95
       },
       "consumers": [],
       "status": "compatibility-only"
@@ -3418,13 +3592,13 @@
       "meaning": "Runtime status",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 260
+        "line": 269
       },
       "serviceEntry": "checkRuntime",
       "serviceCalls": [],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 54
+        "line": 58
       },
       "consumers": [
         {
@@ -3445,7 +3619,7 @@
       "meaning": "Submit official browser request",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 261
+        "line": 270
       },
       "serviceEntry": "async () => { await shell.openExternal(VC_DOWNLOAD_URL); }",
       "serviceCalls": [
@@ -3453,7 +3627,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 55
+        "line": 59
       },
       "consumers": [
         {
@@ -3474,7 +3648,7 @@
       "meaning": "Read coordinated latest saved configuration",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 128
+        "line": 135
       },
       "serviceEntry": "() => store.read()",
       "serviceCalls": [
@@ -3482,7 +3656,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 45
+        "line": 49
       },
       "consumers": [
         {
@@ -3503,19 +3677,19 @@
         },
         {
           "file": "src/renderer/App.tsx",
-          "line": 31
+          "line": 32
         },
         {
           "file": "src/renderer/App.tsx",
-          "line": 33
-        },
-        {
-          "file": "src/renderer/App.tsx",
-          "line": 57
+          "line": 34
         },
         {
           "file": "src/renderer/App.tsx",
           "line": 58
+        },
+        {
+          "file": "src/renderer/App.tsx",
+          "line": 59
         },
         {
           "file": "src/renderer/FloatingView.tsx",
@@ -3540,15 +3714,17 @@
       "meaning": "Legacy complete replacement; concurrent stale full settings can overwrite newer fields",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 226
+        "line": 235
       },
-      "serviceEntry": "input => store.save(input)",
+      "serviceEntry": "async input => {for(const game of Object.keys(GAMES)as GameId[])await environment.assertReady(game);return store.save(input);}",
       "serviceCalls": [
+        "Object.keys",
+        "environment.assertReady",
         "store.save"
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 46
+        "line": 50
       },
       "consumers": [],
       "status": "compatibility-only"
@@ -3569,7 +3745,7 @@
       "meaning": "Reject empty/unknown/type/URL patch; queued latest-read desktop-only merge",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 228
+        "line": 237
       },
       "serviceEntry": "async patch=>store.save(mergeDesktopPreferences(await store.read(),patch))",
       "serviceCalls": [
@@ -3578,7 +3754,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 48
+        "line": 52
       },
       "consumers": [
         {
@@ -3612,16 +3788,17 @@
       "meaning": "Reject empty/unknown/type/path patch; queued latest-read merge of one game; selection retained",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 227
+        "line": 236
       },
-      "serviceEntry": "async(game,patch)=>store.save(mergeGamePaths(await store.read(),game,patch))",
+      "serviceEntry": "async(game,patch)=>{await environment.assertReady(game);return store.save(mergeGamePaths(await store.read(),game,patch));}",
       "serviceCalls": [
+        "environment.assertReady",
         "store.save",
         "store.read"
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 47
+        "line": 51
       },
       "consumers": [
         {
@@ -3642,7 +3819,7 @@
       "meaning": "Resolve saved HTTPS manifest or GitHub stable release; no download or downgrade",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 182
+        "line": 189
       },
       "serviceEntry": "async()=>updater.check(await updateSource())",
       "serviceCalls": [
@@ -3650,7 +3827,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 41
+        "line": 45
       },
       "consumers": [
         {
@@ -3671,7 +3848,7 @@
       "meaning": "Native confirmation before download; pinned size/SHA256 and complete package validation; source must match checked source",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 184
+        "line": 191
       },
       "serviceEntry": "async()=>{\r\n    const source=await updateSource();return updater.download(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'question',title:'下载管理器更新',message:`下载 ${release.version}？`,detail:`更新来源：${source}\\n大小：${(release.size/1024**2).toFixed(1)} MiB\\n\\n${release.notes}`,buttons:['取消','下载更新'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});\r\n  }",
       "serviceCalls": [
@@ -3681,7 +3858,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 43
+        "line": 47
       },
       "consumers": [
         {
@@ -3702,10 +3879,13 @@
       "meaning": "Native confirmation; drain file queue, revalidate packages and isolated install root; external helper waits for exit, retains old package and restarts",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 187
+        "line": 194
       },
-      "serviceEntry": "async()=>{\r\n    if(mods.imports.hasActive())throw new Error('请先等待导入准备／提交完成或取消，再安装管理器更新。');\r\n    if(inspections.storage.hasActive())throw new Error('请先等待恢复区清理完成或取消，再安装管理器更新。');\r\n    if(modBrowser?.hasActiveDownloads())throw new Error('请先等待 Mod 下载和安装完成，或取消下载，再安装管理器更新。');\r\n    preparingUpdateInstall=true;\r\n    try {\r\n    const source=await updateSource();const result=await updater.install(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'warning',title:'安装管理器更新',message:`退出并安装 ${release.version}？`,detail:'请先保存所有未提交的编辑。程序将退出、替换完整便携目录并重新打开。用户数据和 Mod 文件保持；旧程序目录保留作回退副本。',buttons:['取消','退出并安装'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});if(result)setTimeout(()=>app.quit(),250);return result;\r\n    }finally{preparingUpdateInstall=false;}\r\n  }",
+      "serviceEntry": "async()=>{\r\n    for(const game of Object.keys(GAMES)as GameId[])await environment.assertReady(game,true);\r\n    if(environment.hasActive())throw new Error('请先等待环境修复完成，再安装管理器更新。');\r\n    if(mods.imports.hasActive())throw new Error('请先等待导入准备／提交完成或取消，再安装管理器更新。');\r\n    if(inspections.storage.hasActive())throw new Error('请先等待恢复区清理完成或取消，再安装管理器更新。');\r\n    if(modBrowser?.hasActiveDownloads())throw new Error('请先等待 Mod 下载和安装完成，或取消下载，再安装管理器更新。');\r\n    preparingUpdateInstall=true;\r\n    try {\r\n    const source=await updateSource();const result=await updater.install(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'warning',title:'安装管理器更新',message:`退出并安装 ${release.version}？`,detail:'请先保存所有未提交的编辑。程序将退出、替换完整便携目录并重新打开。用户数据和 Mod 文件保持；旧程序目录保留作回退副本。',buttons:['取消','退出并安装'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});if(result)setTimeout(()=>app.quit(),250);return result;\r\n    }finally{preparingUpdateInstall=false;}\r\n  }",
       "serviceCalls": [
+        "Object.keys",
+        "environment.assertReady",
+        "environment.hasActive",
         "mods.imports.hasActive",
         "inspections.storage.hasActive",
         "modBrowser?.hasActiveDownloads",
@@ -3715,7 +3895,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 44
+        "line": 48
       },
       "consumers": [
         {
@@ -3736,7 +3916,7 @@
       "meaning": "Responsive update progress and previous helper result",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 183
+        "line": 190
       },
       "serviceEntry": "()=>updater.readStatus()",
       "serviceCalls": [
@@ -3744,7 +3924,7 @@
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 42
+        "line": 46
       },
       "consumers": [
         {
@@ -3770,17 +3950,18 @@
       "meaning": "Official signature-verified deployment; runtime readiness is explicit",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 263
+        "line": 272
       },
-      "serviceEntry": "async input => {\r\n    const settings = await gameConfiguration(input); const gameId = settings.selectedGame;\r\n    const fields = settings.games[gameId];\r\n    if (!fields.modsDirectory && fields.xxmiRoot) fields.modsDirectory = path.join(fields.xxmiRoot, GAMES[gameId].importer, 'Mods');\r\n    const result = await deployment.deploy(gameId, fields);\r\n    try { return { ...result, settings: await store.save(settings) }; }\r\n    catch { throw new Error('XXMI 文件与路径已部署，但管理器配置保存失败。请检查数据目录权限并手动保存路径。'); }\r\n  }",
+      "serviceEntry": "async input => {\r\n    await environment.assertReady(validateSettings(input).selectedGame,true);\r\n    const settings = await gameConfiguration(input); const gameId = settings.selectedGame;\r\n    const fields = settings.games[gameId];\r\n    if (!fields.modsDirectory && fields.xxmiRoot) fields.modsDirectory = path.join(fields.xxmiRoot, GAMES[gameId].importer, 'Mods');\r\n    const result = await deployment.deploy(gameId, fields);\r\n    try { return { ...result, settings: await store.save(settings) }; }\r\n    catch { throw new Error('XXMI 文件与路径已部署，但管理器配置保存失败。请检查数据目录权限并手动保存路径。'); }\r\n  }",
       "serviceCalls": [
+        "environment.assertReady",
         "path.join",
         "deployment.deploy",
         "store.save"
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 51
+        "line": 55
       },
       "consumers": [
         {
@@ -3810,13 +3991,13 @@
       "meaning": "Inspect explicit game/root without persisting",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 229
+        "line": 238
       },
       "serviceEntry": "(game: GameId, root: string) => inspectXXMI(game, root)",
       "serviceCalls": [],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 50
+        "line": 54
       },
       "consumers": [
         {
@@ -3842,15 +4023,16 @@
       "meaning": "Preserve external other-game/secrets/comments; backup before sync",
       "handler": {
         "file": "src/main/index.ts",
-        "line": 271
+        "line": 281
       },
-      "serviceEntry": "async input => {\r\n    const settings = await gameConfiguration(input); const result = await syncXXMIPaths(settings.selectedGame, settings.games[settings.selectedGame]);\r\n    try { return { ...result, settings: await store.save(settings) }; }\r\n    catch { throw new Error('XXMI 路径已同步，但管理器配置保存失败。原外部配置备份仍在，请检查数据目录权限后保存。'); }\r\n  }",
+      "serviceEntry": "async input => {\r\n    await environment.assertReady(validateSettings(input).selectedGame,true);\r\n    const settings = await gameConfiguration(input); const result = await syncXXMIPaths(settings.selectedGame, settings.games[settings.selectedGame]);\r\n    try { return { ...result, settings: await store.save(settings) }; }\r\n    catch { throw new Error('XXMI 路径已同步，但管理器配置保存失败。原外部配置备份仍在，请检查数据目录权限后保存。'); }\r\n  }",
       "serviceCalls": [
+        "environment.assertReady",
         "store.save"
       ],
       "preload": {
         "file": "src/preload/index.ts",
-        "line": 53
+        "line": 57
       },
       "consumers": [
         {
@@ -3882,6 +4064,10 @@
           "line": 10
         },
         {
+          "file": "src/renderer/EnvironmentPanel.tsx",
+          "line": 16
+        },
+        {
           "file": "src/renderer/RecoveryPage.tsx",
           "line": 14
         },
@@ -3903,7 +4089,7 @@
         },
         {
           "file": "src/renderer/App.tsx",
-          "line": 33
+          "line": 34
         },
         {
           "file": "src/renderer/FloatingView.tsx",
@@ -3913,41 +4099,47 @@
       "sendSites": [
         {
           "file": "src/main/index.ts",
-          "line": 62,
+          "line": 64,
           "payload": "{gameId:settings.selectedGame,settingsChanged}"
         }
       ],
       "broadcastCalls": [
         {
-          "line": 79,
+          "line": 81,
           "arguments": [
             "true"
           ]
         },
         {
-          "line": 95,
+          "line": 98,
           "arguments": [
             "/^(settings:(save|save-game-paths|save-desktop-preferences)|recovery:(restore|apply-restore)|xxmi:(deploy|sync))$/.test(channel)"
           ]
         },
         {
-          "line": 97,
+          "line": 100,
           "arguments": []
         },
         {
-          "line": 166,
+          "line": 113,
+          "arguments": [
+            "true"
+          ]
+        },
+        {
+          "line": 173,
           "arguments": []
         },
         {
-          "line": 167,
+          "line": 174,
           "arguments": []
         },
         {
-          "line": 238,
+          "line": 247,
           "arguments": []
         },
         {
-          "line": 287,
+          "line": 298,
           "arguments": []
         }
       ],

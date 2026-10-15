@@ -33,7 +33,8 @@
     "smoke:v004": "node scripts/smoke-v004.mjs",
     "smoke:second-batch": "node scripts/smoke-second-batch.mjs",
     "smoke:preset-workflows": "node scripts/smoke-preset-workflows.mjs",
-    "smoke:imports": "node scripts/smoke-import-workflows.mjs"
+    "smoke:imports": "node scripts/smoke-import-workflows.mjs",
+    "smoke:environment": "node scripts/smoke-environment.mjs"
   },
   "dependencies": {
     "7zip-bin-full": "^26.4.1",

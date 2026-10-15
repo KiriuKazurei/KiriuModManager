@@ -1,3 +1,4 @@
+import {GameEnvironmentService} from './environment';
 import { app, BrowserWindow, dialog, ipcMain, IpcMainInvokeEvent, net, shell, Tray, Menu, nativeImage } from 'electron';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -47,6 +48,7 @@ app.whenReady().then(async () => {
   const mods = new ModService(app.getPath('userData'), async game => (await store.read()).games[game]);
   const business=new BusinessService(app.getPath('userData'),mods,store);
   const inspections=new Inspections(app.getPath('userData'),store,mods,business,app.getVersion());
+  const environment=new GameEnvironmentService(app.getPath('userData'),store,inspections.jobs);
   const presetManifests=new PresetManifests(app.getPath('userData'),mods,business,store);
   await mods.imports.initialize();
   const ini=new IniService(mods,business.recovery);
@@ -57,7 +59,7 @@ app.whenReady().then(async () => {
   const updateSource=async()=>(await store.read()).desktop?.updateSourceUrl??DEFAULT_APP_UPDATE_SOURCE;
   let pending:Promise<unknown>=Promise.resolve();
   const mutation=<T>(work:()=>Promise<T>):Promise<T>=>{const task=pending.then(work);pending=task.catch(()=>{});return task;};
-  finishFileOperations=async()=>{await mods.imports.close();await pending;await operationLog.flush();};
+  finishFileOperations=async()=>{environment.close();await mods.imports.close();await pending;await operationLog.flush();};
   const showMain=()=>{window?.show();if(window?.isMinimized())window.restore();window?.focus();};
   const broadcast=async(settingsChanged=false)=>{const settings=await store.read();for(const target of [window,floatingWindow])if(target&&!target.isDestroyed())target.webContents.send('desktop:changed',{gameId:settings.selectedGame,settingsChanged});};
   const trustedDocuments=new WeakMap<BrowserWindow,string>();
@@ -85,6 +87,7 @@ app.whenReady().then(async () => {
     ipcMain.handle(channel, async (event: IpcMainInvokeEvent, ...args: unknown[]): Promise<Result<IPCValue<C>>> => {
       const sender=[window,floatingWindow].find(target=>target&&!target.isDestroyed()&&event.sender===target.webContents);
       if (!sender || event.senderFrame !== sender.webContents.mainFrame || documentUrl(event.senderFrame.url)!==trustedDocuments.get(sender)) return { ok: false, error: '此页面无权访问桌面接口。' };
+      if(channel.startsWith('environment:')&&sender!==window)return {ok:false,error:'请在主窗口检查和修复游戏环境。'};
       if((channel.startsWith('mod-import:')||channel==='mods:import')&&sender!==window)return {ok:false,error:'请在主窗口使用导入预检。'};
       if(channel==='desktop:window-theme'&&sender!==window)return {ok:false,error:'请在主窗口设置标题栏主题。'};
       if((channel.startsWith('preset-manifest:')||['presets:preview','presets:commit','presets:apply'].includes(channel))&&sender!==window)return {ok:false,error:'请在主窗口使用预设预览与清单。'};
@@ -104,6 +107,10 @@ app.whenReady().then(async () => {
       return responsiveChannels.has(channel)?run():mutation(run);
     });
   };
+  handle('environment:check',(game,mode)=>environment.start(game,mode));
+  handle('environment:choose',async(game,kind)=>{if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');if(!['game','loader'].includes(kind))throw new Error('安装位置类型无效。');const choice=await dialog.showOpenDialog(window!,{title:kind==='game'?'选择游戏安装目录':'选择 XXMI 外层安装根',properties:['openDirectory']});return choice.canceled||!choice.filePaths[0]?null:environment.start(game,'discover',{kind,directory:choice.filePaths[0]});});
+  handle('environment:prepare',(game,request)=>environment.prepare(game,request));
+  handle('environment:apply',async(game,token)=>{const plan=environment.readPlan(game,token);const answer=await dialog.showMessageBox(window!,{type:'warning',title:plan.action==='rollback'?'确认回退环境修复':'确认游戏路径修复',message:plan.action==='rollback'?'回退此记录中的环境改动？':'提交已预览的路径修复？',detail:[GAMES[game].name,...plan.changes.map(c=>c.role+'：'+c.before+' → '+c.after),...plan.warnings].join('\n').slice(0,16000),buttons:['取消','确认提交'],defaultId:0,cancelId:0});if(answer.response!==1)return null;try{return await environment.apply(game,token);}finally{inspections.jobs.invalidate(game);await broadcast(true);}});
   const confirmImport=async(game:GameId,token:string,acceptIncomplete:boolean)=>{
     const preview=mods.imports.readPlan(game,token);if(!preview.canCommit)throw new Error('所选条目存在阻挡，请修改后更新预检。');
     const selected=preview.items.filter(i=>i.selected);const choice=await dialog.showMessageBox(window!,{type:'question',title:'确认导入 Mod',message:`导入 ${selected.length} 项 Mod（默认停用）？`,detail:[GAMES[game].name+' · '+preview.root,...selected.map(i=>[i.folder,'DISABLED_'+i.name].filter(Boolean).join('/')+' · '+i.bytes+' 字节'),`跳过 ${preview.items.length-selected.length} 项；不覆盖已有内容。`,...preview.space.map(v=>v.location+' 需要 '+v.required+' 字节，可用 '+(v.available??'未知'))].join('\n').slice(0,16000),buttons:['取消','确认导入'],defaultId:0,cancelId:0});
@@ -160,7 +167,7 @@ app.whenReady().then(async () => {
   });
   handle('recovery:protect',(game,ids,value)=>inspections.storage.setProtection(game,ids,value));
   handle('recovery:prepare-restore',(game,id)=>inspections.start('restore-preview',game,id));
-  const confirmRestore=async(game:GameId,token:string,confirmation?:import('../shared/contracts').DependencyConfirmation)=>{const plan=business.restorePlanner.readPlan(game,token);if(!plan.complete)throw new Error('恢复范围不完整或存在阻断，请先处理。');const choice=await dialog.showMessageBox(window!,{type:'warning',title:'确认恢复预览',message:`恢复“${plan.name}”？`,detail:[`游戏：${GAMES[game].name}；根：${plan.root}`,...plan.scope.map(s=>`${s.role}：${s.path}\n${s.action}`),...plan.warnings].join('\n').slice(0,16000),buttons:['取消','恢复所选备份'],defaultId:0,cancelId:0});return choice.response===1?business.restore(game,plan.id,confirmation,token):null;};
+  const confirmRestore=async(game:GameId,token:string,confirmation?:import('../shared/contracts').DependencyConfirmation)=>{const plan=business.restorePlanner.readPlan(game,token);if(plan.kind==='snapshot')await environment.assertReady(game,true);if(!plan.complete)throw new Error('恢复范围不完整或存在阻断，请先处理。');const choice=await dialog.showMessageBox(window!,{type:'warning',title:'确认恢复预览',message:`恢复“${plan.name}”？`,detail:[`游戏：${GAMES[game].name}；根：${plan.root}`,...plan.scope.map(s=>`${s.role}：${s.path}\n${s.action}`),...plan.warnings].join('\n').slice(0,16000),buttons:['取消','恢复所选备份'],defaultId:0,cancelId:0});return choice.response===1?business.restore(game,plan.id,confirmation,token):null;};
   handle('recovery:apply-restore',(game,token,confirmation)=>confirmRestore(game,token,confirmation));
   handle('recovery:prepare-cleanup',(game,ids)=>inspections.storage.prepare(game,ids));
   handle('recovery:apply-cleanup',async(game,token)=>{const plan=inspections.storage.readPlan(game,token);const choice=await dialog.showMessageBox(window!,{type:'warning',title:'永久清理所选副本',message:`永久清理 ${plan.items.length} 个副本？`,detail:plan.items.map(i=>`${i.name} · ${i.kind} · ${i.root} · ${i.bytes} 逻辑字节`).concat(plan.warnings).join('\n').slice(0,16000),buttons:['取消','永久清理所选副本'],defaultId:0,cancelId:0});if(choice.response!==1)return null;const job=await inspections.storage.begin(game,token);void mutation(async()=>{await operationLog.run('recovery:cleanup-run',[game,job.id],()=>inspections.storage.manage(game,job.id,'continue'));await broadcast();}).catch(()=>{});return job;});
@@ -185,6 +192,8 @@ app.whenReady().then(async () => {
     const source=await updateSource();return updater.download(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'question',title:'下载管理器更新',message:`下载 ${release.version}？`,detail:`更新来源：${source}\n大小：${(release.size/1024**2).toFixed(1)} MiB\n\n${release.notes}`,buttons:['取消','下载更新'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});
   });
   handle('update:install',async()=>{
+    for(const game of Object.keys(GAMES)as GameId[])await environment.assertReady(game,true);
+    if(environment.hasActive())throw new Error('请先等待环境修复完成，再安装管理器更新。');
     if(mods.imports.hasActive())throw new Error('请先等待导入准备／提交完成或取消，再安装管理器更新。');
     if(inspections.storage.hasActive())throw new Error('请先等待恢复区清理完成或取消，再安装管理器更新。');
     if(modBrowser?.hasActiveDownloads())throw new Error('请先等待 Mod 下载和安装完成，或取消下载，再安装管理器更新。');
@@ -198,8 +207,8 @@ app.whenReady().then(async () => {
   handle('desktop:show',async()=>showMain());
   handle('desktop:quit',async()=>{setImmediate(()=>app.quit());});
   handle('desktop:game',(game:GameId)=>chooseGame(game));
-  handle('desktop:launch',async (game:GameId,mode:'gui'|'game')=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');const plan=await launchPlan(game,settings.games[game],mode);await spawnLauncher(plan);return mode==='gui'?'XXMI 打开请求已提交，请检查 Launcher 窗口。':'XXMI 启动请求已提交；不代表游戏或 Mod 已加载，请检查游戏窗口。';});
-  handle('desktop:refresh',async (game:GameId)=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');const installation=await inspectXXMI(game,settings.games[game].xxmiRoot);if(!installation.installed)throw new Error('所选 loader 未安装，无法确认刷新键。');const executables=await gameExecutables(game,settings.games[game].gameDirectory);const key=await refreshKey(installation.iniPath);const sent=await sendRefresh(path.join(app.getAppPath(),'assets','refresh-helper.ps1'),executables,key.virtualKey);return `${key.name} 刷新请求已发送到所选游戏窗口（PID ${sent.pid}）。${key.defaultKey?'未找到自定义配置，使用默认 F10。':''}请在游戏中确认效果。`;});
+  handle('desktop:launch',async (game:GameId,mode:'gui'|'game')=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');if(mode==='game')await environment.assertReady(game,true);const plan=await launchPlan(game,settings.games[game],mode);await spawnLauncher(plan);return mode==='gui'?'XXMI 打开请求已提交，请检查 Launcher 窗口。':'XXMI 启动请求已提交；不代表游戏或 Mod 已加载，请检查游戏窗口。';});
+  handle('desktop:refresh',async (game:GameId)=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');await environment.assertReady(game,true);const installation=await inspectXXMI(game,settings.games[game].xxmiRoot);if(!installation.installed)throw new Error('所选 loader 未安装，无法确认刷新键。');if(!installation.gameDirectory||path.resolve(installation.gameDirectory).toLowerCase()!==path.resolve(settings.games[game].gameDirectory).toLowerCase())throw new Error('Launcher 游戏目录与设置不一致，请先到设置的游戏环境修复。');const executables=await gameExecutables(game,settings.games[game].gameDirectory);const key=await refreshKey(installation.iniPath);const sent=await sendRefresh(path.join(app.getAppPath(),'assets','refresh-helper.ps1'),executables,key.virtualKey);return `${key.name} 刷新请求已发送到所选游戏窗口（PID ${sent.pid}）。${key.defaultKey?'未找到自定义配置，使用默认 F10。':''}请在游戏中确认效果。`;});
   handle('desktop:link',async (game:GameId,kind:'market'|'update')=>{if(!Object.hasOwn(GAMES,game)||!['market','update'].includes(kind))throw new Error('网页入口无效。');if(kind==='market'){await browser().navigate('home',game);return `${GAMES[game].name}网页已载入，请在左侧获取Mod中浏览。`;}const settings=await store.read();const url=resolveWebUrl(settings.desktop?.updateUrl||'',game,kind);if(!url)throw new Error('尚未配置更新发布页。');await shell.openExternal(url);return '网页打开请求已提交到默认浏览器。';});
   handle('presets:list',(game:GameId)=>business.presets(game));
   handle('presets:save',(game:GameId,id:string|null,name:string,members:Record<string,boolean>|null)=>business.savePreset(game,id,name,members));
@@ -223,8 +232,8 @@ app.whenReady().then(async () => {
   handle('recovery:list',(game:GameId)=>business.recovery.list(game));
   handle('recovery:create',(game:GameId,name:string)=>business.createBackup(game,name));
   handle('recovery:restore',async(game,id,confirmation)=>{const plan=await business.restorePlanner.prepare(game,id);return confirmRestore(game,plan.token,confirmation);});
-  handle('settings:save', input => store.save(input));
-  handle('settings:save-game-paths',async(game,patch)=>store.save(mergeGamePaths(await store.read(),game,patch)));
+  handle('settings:save', async input => {for(const game of Object.keys(GAMES)as GameId[])await environment.assertReady(game);return store.save(input);});
+  handle('settings:save-game-paths',async(game,patch)=>{await environment.assertReady(game);return store.save(mergeGamePaths(await store.read(),game,patch));});
   handle('settings:save-desktop-preferences',async patch=>store.save(mergeDesktopPreferences(await store.read(),patch)));
   handle('xxmi:inspect', (game: GameId, root: string) => inspectXXMI(game, root));
   handle('mods:scan', (game: GameId) => mods.scan(game));
@@ -261,6 +270,7 @@ app.whenReady().then(async () => {
   handle('runtime:download', async () => { await shell.openExternal(VC_DOWNLOAD_URL); });
   const gameConfiguration=async(input:unknown)=>{const requested=validateSettings(input);const current=await store.read();return {...current,selectedGame:requested.selectedGame,games:{...current.games,[requested.selectedGame]:requested.games[requested.selectedGame]}};};
   handle('xxmi:deploy', async input => {
+    await environment.assertReady(validateSettings(input).selectedGame,true);
     const settings = await gameConfiguration(input); const gameId = settings.selectedGame;
     const fields = settings.games[gameId];
     if (!fields.modsDirectory && fields.xxmiRoot) fields.modsDirectory = path.join(fields.xxmiRoot, GAMES[gameId].importer, 'Mods');
@@ -269,6 +279,7 @@ app.whenReady().then(async () => {
     catch { throw new Error('XXMI 文件与路径已部署，但管理器配置保存失败。请检查数据目录权限并手动保存路径。'); }
   });
   handle('xxmi:sync', async input => {
+    await environment.assertReady(validateSettings(input).selectedGame,true);
     const settings = await gameConfiguration(input); const result = await syncXXMIPaths(settings.selectedGame, settings.games[settings.selectedGame]);
     try { return { ...result, settings: await store.save(settings) }; }
     catch { throw new Error('XXMI 路径已同步，但管理器配置保存失败。原外部配置备份仍在，请检查数据目录权限后保存。'); }

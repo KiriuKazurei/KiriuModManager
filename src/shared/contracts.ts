@@ -1,3 +1,4 @@
+import type {EnvironmentRepairRequest,EnvironmentRepairPreview,EnvironmentRepairReceipt} from './environment';
 import type {ImportSource,ImportChoice,ImportReceipt,ImportFilePage} from './import-workflows';
 import type {InspectionJob,ReportOptions,DiagnosticExport,RestorePreview,CleanupPreview,CleanupJob,ConflictDetails,ManagedReference} from './inspections';
 import type {PresetManifestMember,PresetCommitResult,ManifestChoice,PresetImportOptions,PresetImportReceipt} from './preset-workflows';
@@ -73,6 +74,10 @@ export interface AppUpdateStatus {
   lastResult?:{stage:string;message:string;backup?:string};
 }
 export interface DesktopAPI {
+  checkGameEnvironment(game:GameId,mode:'quick'|'discover'):Promise<Result<InspectionJob>>;
+  chooseGameInstallation(game:GameId,kind:'game'|'loader'):Promise<Result<InspectionJob|null>>;
+  prepareEnvironmentRepair(game:GameId,request:EnvironmentRepairRequest):Promise<Result<EnvironmentRepairPreview>>;
+  applyEnvironmentRepair(game:GameId,token:string):Promise<Result<EnvironmentRepairReceipt|null>>;
   prepareModImport(game:GameId,source:ImportSource):Promise<Result<InspectionJob|null>>;
   reviseModImport(game:GameId,sessionId:string,choices:ImportChoice[]):Promise<Result<InspectionJob>>;
   modImportFiles(game:GameId,sessionId:string,entryId:string,offset?:number):Promise<Result<ImportFilePage>>;

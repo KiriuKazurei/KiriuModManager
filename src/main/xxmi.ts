@@ -1,3 +1,4 @@
+import {decodeIni} from './ini';
 import {fileBytes} from './inspection-files';
 import {assertNoLinks} from './archive';
 import path from 'node:path';
@@ -36,7 +37,7 @@ export async function inspectXXMI(gameId: GameId, rootInput: string): Promise<In
   const launcherPath = path.join(root, 'Resources', 'Bin', 'XXMI Launcher.exe');
   const warnings: string[] = [];
   let config: ObjectValue = {};
-  try { config = object(JSON.parse((await fileBytes(path.join(root, 'XXMI Launcher Config.json'))).toString('utf8'))); }
+  try { config = object(JSON.parse(decodeIni(await fileBytes(path.join(root, 'XXMI Launcher Config.json'))).text)); }
   catch (error) {
     warnings.push((error as NodeJS.ErrnoException).code === 'ENOENT' ? '未找到 Launcher 配置，将按默认 importer 目录检查。' : 'Launcher 配置无法读取或格式无效；仅检查默认目录，未导入游戏路径。');
   }
@@ -49,7 +50,7 @@ export async function inspectXXMI(gameId: GameId, rootInput: string): Promise<In
   let iniExists = false;
   if (importerExists) {
     try {
-      const contents = (await fileBytes(iniPath,4*1024**2)).toString('utf8'); iniExists = true;
+      const contents = decodeIni(await fileBytes(iniPath,4*1024**2)).text; iniExists = true;
       modsDirectories = [...new Set(parseRecursiveIncludes(contents).map(value => resolveLoaderPath(importerDirectory, value)))];
       if (!modsDirectories.length) warnings.push('d3dx.ini 没有可识别的 [Include] include_recursive 路径；不能确认实际 Mod 目录。');
     } catch { warnings.push('无法读取 importer 的 d3dx.ini；不能确认实际 Mod 目录。'); }

@@ -21,6 +21,10 @@ export function inspectRuntimeIPC(main,preload){
 
 // Business semantics are reviewed metadata, paired with AST-derived actual signatures/registrations.
 const semantics={
+  checkGameEnvironment:['none','incomplete candidates / unknown issues','Main-window saved paths; quick known-file checks or bounded cancelable discovery job; no configuration writes'],
+  chooseGameInstallation:['value:null','incomplete candidates / unknown issues','Main-window native directory chooser; same bounded discovery; no arbitrary EXE or automatic save'],
+  prepareEnvironmentRepair:['none','unsupported schema rejects','Owned expiring report/candidate or repair ID; whitelist save/sync-game/sync-mods preview; public values only, Mod root retained'],
+  applyEnvironmentRepair:['value:null','durable repair journal / conflict','Native confirmation and shared queue; settings/candidate/config revalidation; byte backups and CAS; pending repair requires explicit rollback, never overwrite external edits'],
   prepareModImport:['value:null','source errors / per-entry blockers','Main-window native local sources or pinned download-task ID; cancelable shared job; owned snapshot cache only; source/root/binding evidence and strict tree SHA256'],
   reviseModImport:['cancel job','per-entry blockers','Owned expiring session; validated subset, relative role folders and names; duplicate default skip requires explicit separate copy; no overwrite'],
   modImportFiles:['none','bounded page','Main-window owned candidate file list; 100 file records per page; no arbitrary paths'],

@@ -1,7 +1,8 @@
+import type {EnvironmentReport} from './environment';
 import type {ImportPreview} from './import-workflows';
 import type {GameId,GamePaths,RecoveryItem} from './contracts';
 import type {PresetApplyPreview,PresetExportPreview,PresetImportPreview} from './preset-workflows';
-export type InspectionKind='diagnostics'|'inventory'|'conflicts'|'restore-preview'|'preset-preview'|'preset-export'|'preset-import'|'mod-import';
+export type InspectionKind='environment'|'diagnostics'|'inventory'|'conflicts'|'restore-preview'|'preset-preview'|'preset-export'|'preset-import'|'mod-import';
 export interface DiagnosticFact {key:string;group:string;status:'pass'|'warning'|'error'|'unknown'|'skipped';message:string;evidence:string[];navigation?:'settings'|'recovery'|'mods'|'presets'}
 export interface DiagnosticReport {kind:'diagnostics';gameId:GameId;version:string;observedAt:string;facts:DiagnosticFact[];incomplete:boolean}
 export interface RecoverySpaceItem extends RecoveryItem {bytes:number|null;files:number;complete:boolean;protected:boolean;systemProtection:string[];cleanable:boolean;category:string;integrity:string}
@@ -13,9 +14,9 @@ export interface ConflictGroup {id:string;type:'texture'|'shader';hash:string;mo
 export interface ConflictInspection {kind:'conflicts';gameId:GameId;resultId:string;groups:ConflictGroup[];warnings:string[];scannedMods:number;scannedFiles:number;complete:boolean}
 export interface ConflictDetails {group:ConflictGroup;occurrences:(ConflictOccurrence&{snippet:string})[];total:number;offset:number;warnings:string[]}
 export interface IniNavigationTarget {gameId:GameId;modId:string;fileRelativePath:string;line:number;expectedDigest:string}
-export interface InspectionJob {id:string;kind:InspectionKind;gameId:GameId;paths:GamePaths;stage:'running'|'complete'|'canceled'|'error';progress:string;observedAt:string;stale:boolean;warnings:string[];result?:DiagnosticReport|RecoveryInventory|ConflictInspection|{kind:'restore-preview';preview:RestorePreview}|PresetApplyPreview|PresetExportPreview|PresetImportPreview|ImportPreview}
+export interface InspectionJob {id:string;kind:InspectionKind;gameId:GameId;paths:GamePaths;stage:'running'|'complete'|'canceled'|'error';progress:string;observedAt:string;stale:boolean;warnings:string[];result?:EnvironmentReport|DiagnosticReport|RecoveryInventory|ConflictInspection|{kind:'restore-preview';preview:RestorePreview}|PresetApplyPreview|PresetExportPreview|PresetImportPreview|ImportPreview}
 export interface ReportOptions {includeNames:boolean}
 export interface DiagnosticExport {json:string;markdown:string;stale:boolean;truncated:number}
 export interface RestorePreview {token:string;id:string;gameId:GameId;name:string;kind:RecoveryItem['kind'];root:string;expiresAt:string;scope:{role:string;path:string;action:string;files:number;bytes:number|null}[];affectedIds:string[];warnings:string[];changes:{path:string;change:'added'|'removed'|'changed'|'same'|'not-compared'}[];complete:boolean;estimatedBytes:number|null;space:{volume:string;available:number|null;required:number}[]}
 export interface CleanupPreview {token:string;gameId:GameId;expiresAt:string;items:{id:string;name:string;kind:string;root:string;bytes:number;files:number}[];warnings:string[]}
-export type ManagedReference={kind:'mod';id:string}|{kind:'recovery';id:string}|{kind:'storage';category:'profiles'|'pending-operations'|'recovery-cleanup'|'root-history'|'import-preparations'};
+export type ManagedReference={kind:'mod';id:string}|{kind:'recovery';id:string}|{kind:'storage';category:'profiles'|'pending-operations'|'recovery-cleanup'|'root-history'|'import-preparations'|'environment-repairs'};

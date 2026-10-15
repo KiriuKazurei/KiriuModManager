@@ -1,3 +1,4 @@
+import {resolveGameInstallation} from './game-paths';
 import {randomUUID} from 'node:crypto';
 import {diagnosticLogRows} from './operation-log';
 import {promises as fs,constants} from 'node:fs';
@@ -24,6 +25,7 @@ export class Diagnostics {
    catch(error){add('path.'+role,'路径',(error as NodeJS.ErrnoException).code==='ENOENT'?'error':'unknown','目录缺失、权限未知或含链接。',[target],'settings');}
   }
   if(paths.modsDirectory&&paths.gameDirectory&&(isInside(paths.modsDirectory,paths.gameDirectory)||isInside(paths.gameDirectory,paths.modsDirectory)))add('path.overlap','路径','warning','Mod 目录与游戏目录存在包含关系，请核对是否为专用目录。',[],'settings');
+  progress('统一核对游戏 EXE');const gameResolution=await resolveGameInstallation(game,paths.gameDirectory,{signal});add('game.executable','游戏路径',!gameResolution.complete?'unknown':gameResolution.matches.length===1?'pass':'error',!gameResolution.complete?'查找范围不完整或现场变化；未认定游戏缺失。':gameResolution.matches.length===1?'已确认唯一游戏 EXE；未启动。':'未找到唯一游戏 EXE，请到设置检查候选。',gameResolution.issues,'settings');
   progress('读取组件安装记录');const versions=await inspectInstalledVersions(game,paths.xxmiRoot);
   for(const [role,value]of Object.entries(versions))add('version.'+role,'组件记录',value.state==='known'?'pass':value.state==='missing'?'warning':'unknown',value.state==='known'?`安装记录版本：${value.version}；不证明当前加载的 DLL 版本。`:`安装记录：${value.state}。`,value.path?[value.path]:[]);
   try{const inspection=await inspectXXMI(game,paths.xxmiRoot);add('launcher','加载器',inspection.launcherExists?'pass':'error','Launcher 文件'+(inspection.launcherExists?'存在；未运行。':'缺失。'),[inspection.launcherPath],'settings');add('importer','加载器',inspection.importerExists?'pass':'error','所选 importer '+(inspection.importerExists?'目录存在。':'目录缺失。'),[inspection.importerDirectory],'settings');

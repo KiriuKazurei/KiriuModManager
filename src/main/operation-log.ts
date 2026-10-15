@@ -5,7 +5,7 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import type {GameId} from '../shared/contracts';
 import {assertNoLinks} from './archive';
 
-const actions=new Set(['mod-import:commit','mods:operate','mods:batch','mods:exclusive-save','mods:exclusive-delete','mods:import','mods:replace','mods:delete','mods:choose-cover','mods:group','characters:choose-cover','presets:save','presets:add-members','presets:delete','presets:apply','ini:save','recovery:create','recovery:restore','mods:install-download','profiles:capture','profiles:duplicate','profiles:apply','recovery:protect','recovery:apply-restore','recovery:apply-cleanup','recovery:cleanup-job','recovery:cleanup-run','diagnostics:export','presets:commit','preset-manifest:commit','preset-manifest:replacement','preset-manifest:export']);
+const actions=new Set(['environment:apply','mod-import:commit','mods:operate','mods:batch','mods:exclusive-save','mods:exclusive-delete','mods:import','mods:replace','mods:delete','mods:choose-cover','mods:group','characters:choose-cover','presets:save','presets:add-members','presets:delete','presets:apply','ini:save','recovery:create','recovery:restore','mods:install-download','profiles:capture','profiles:duplicate','profiles:apply','recovery:protect','recovery:apply-restore','recovery:apply-cleanup','recovery:cleanup-job','recovery:cleanup-run','diagnostics:export','presets:commit','preset-manifest:commit','preset-manifest:replacement','preset-manifest:export']);
 const MAX_FILE_BYTES=2*1024**2,ARCHIVES=3,MAX_TARGETS=40;
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 const object=(value:unknown):Record<string,unknown>=>value&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
@@ -24,7 +24,7 @@ const category=(error:unknown)=>{const text=error instanceof Error?error.message
 
 // References are emitted only inside an authorized, logged operation. Keep raw
 // backup paths, configuration, text edits, URLs and cookies out of the log.
-export async function logOperationReference(directory:string,gameId:GameId,kind:'backup'|'file-operation',id:string){
+export async function logOperationReference(directory:string,gameId:GameId,kind:'backup'|'file-operation'|'environment-repair',id:string){
  const current=context.getStore();if(!current||path.resolve(directory)!==current.directory||current.gameId!==gameId||!uuid(id))return;
  current.references.add(id);await current.write({phase:'reference',reference:{kind,id}});
 }

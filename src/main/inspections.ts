@@ -23,7 +23,7 @@ export class Inspections {
  async location(game:GameId,reference:ManagedReference){if(!Object.hasOwn(GAMES,game)||!reference||typeof reference!=='object')throw new Error('位置引用无效。');let target:string;
   if(reference.kind==='mod'){target=(await this.mods.readonlyContext(game,reference.id)).directory;}
   else if(reference.kind==='recovery'){if(typeof reference.id!=='string'||!reference.id||path.basename(reference.id)!==reference.id)throw new Error('恢复引用无效。');if(/^[a-f0-9-]{36}$/.test(reference.id)){const pending=await new FileOperations(this.directory).info(game,reference.id);target=pending?path.join(this.directory,'pending-operations'):containedPath(path.join(this.directory,'removed',game),reference.id);}else{const item=(await this.business.recovery.list(game)).find(i=>i.id===reference.id&&i.kind==='legacy');if(!item)throw new Error('项目位置不可用。');target=containedPath(path.join(this.directory,'removed',game),reference.id);}}
-  else if(reference.kind==='storage'&&['profiles','pending-operations','recovery-cleanup','root-history','import-preparations'].includes(reference.category)){target=path.join(this.directory,reference.category,...(['profiles','root-history'].includes(reference.category)?[game]:[]));}
+  else if(reference.kind==='storage'&&['profiles','pending-operations','recovery-cleanup','root-history','import-preparations','environment-repairs'].includes(reference.category)){target=path.join(this.directory,reference.category,...(['profiles','root-history','environment-repairs'].includes(reference.category)?[game]:[]));}
   else throw new Error('位置引用无效。');await assertNoLinks(target);await fs.stat(target);return target;
  }
 }

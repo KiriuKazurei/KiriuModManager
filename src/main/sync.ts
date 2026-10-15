@@ -1,3 +1,4 @@
+import {requireGameExecutable} from './game-paths';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { GameId, GamePaths, GAMES, Inspection } from '../shared/contracts';
@@ -45,24 +46,7 @@ export async function validatePaths(gameId: GameId, input: GamePaths): Promise<G
   }
   if(output.modsDirectory===path.parse(output.modsDirectory).root)throw new Error('Mod 目录不能直接使用磁盘根目录，请选择专用文件夹。');
   if (!(await fs.stat(output.gameDirectory)).isDirectory()) throw new Error('游戏目录不存在，请先选择游戏安装位置。');
-  const names = gameId === 'zzz' ? ['ZenlessZoneZero.exe', 'ZenlessZoneZeroBeta.exe'] : ['Endfield.exe'];
-  let found = false;
-  for (const name of names) {
-    try { if ((await fs.stat(path.join(output.gameDirectory, name))).isFile()) { found = true; break; } } catch { /* try other known executable */ }
-  }
-  if (!found) {
-    // Official ModelImporter.validate_game_exe_path also accepts one unique nested executable.
-    let matches = 0; let directories = 0;
-    const walk = async (directory: string): Promise<void> => {
-      if (++directories > 10000) throw new Error('游戏目录范围过大，请直接选择包含游戏 EXE 的安装目录。');
-      for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
-        if (entry.isFile() && names.includes(entry.name)) matches++;
-        if (entry.isDirectory() && !entry.isSymbolicLink()) await walk(path.join(directory, entry.name));
-      }
-    };
-    await walk(output.gameDirectory); found = matches === 1;
-  }
-  if (!found) throw new Error(`未找到唯一的 ${names.join(' / ')}。请选择${GAMES[gameId].name}的实际游戏安装目录。`);
+  await requireGameExecutable(gameId,output.gameDirectory);
   // Do not write importer files into a game installation or a drive root.
   if (output.xxmiRoot === path.parse(output.xxmiRoot).root || output.gameDirectory === output.xxmiRoot || !path.relative(output.gameDirectory, output.xxmiRoot).startsWith('..') && !path.isAbsolute(path.relative(output.gameDirectory, output.xxmiRoot))) throw new Error('XXMI 安装位置必须与游戏目录分开，且不能是磁盘根目录。');
   if (output.modsDirectory === output.xxmiRoot || output.modsDirectory === output.gameDirectory) throw new Error('Mod 目录不能直接使用 XXMI 根目录或游戏目录。');

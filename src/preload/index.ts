@@ -3,6 +3,10 @@ import type { DesktopAPI } from '../shared/contracts';
 import type {IPCChannel,IPCArguments,IPCContracts} from '../shared/ipc-contracts';
 const invoke=<C extends IPCChannel>(channel:C,...args:IPCArguments<C>):ReturnType<IPCContracts[C]>=>ipcRenderer.invoke(channel,...args) as ReturnType<IPCContracts[C]>;
 const api: DesktopAPI = {
+  checkGameEnvironment:(game,mode)=>invoke('environment:check',game,mode),
+  chooseGameInstallation:(game,kind)=>invoke('environment:choose',game,kind),
+  prepareEnvironmentRepair:(game,request)=>invoke('environment:prepare',game,request),
+  applyEnvironmentRepair:(game,token)=>invoke('environment:apply',game,token),
   prepareModImport:(game,source)=>invoke('mod-import:prepare',game,source),
   reviseModImport:(game,id,choices)=>invoke('mod-import:revise',game,id,choices),
   modImportFiles:(game,id,entry,offset)=>invoke('mod-import:files',game,id,entry,offset),
