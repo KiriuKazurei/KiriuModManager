@@ -4,7 +4,8 @@ import type {GameId} from '../shared/contracts';
 import {GAMES} from '../shared/contracts';
 import {assertNoLinks} from './archive';
 import {sha} from './inspection-files';
-export const GAME_ADAPTERS={zzz:{names:['ZenlessZoneZero.exe','ZenlessZoneZeroBeta.exe']},endfield:{names:['Endfield.exe']}} as const;
+import {GAME_EXECUTABLE_NAMES} from '../shared/path-input';
+export const GAME_ADAPTERS={zzz:{names:GAME_EXECUTABLE_NAMES.zzz},endfield:{names:GAME_EXECUTABLE_NAMES.endfield}} as const;
 export interface GameResolution {root:string;matches:{executable:string;directory:string;identity:string}[];complete:boolean;issues:string[];visited:number;fingerprint:string}
 export async function resolveGameInstallation(game:GameId,directory:string,options:{signal?:AbortSignal;maxEntries?:number;maxDepth?:number;timeoutMs?:number;quick?:boolean}={}):Promise<GameResolution>{
  if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');
@@ -32,4 +33,4 @@ export async function resolveGameInstallation(game:GameId,directory:string,optio
  }
  return finish();
 }
-export async function requireGameExecutable(game:GameId,directory:string,signal?:AbortSignal){const result=await resolveGameInstallation(game,directory,{signal});if(!result.complete)throw new Error(result.issues.join('；'));if(result.matches.length!==1)throw new Error('未找到唯一的'+GAMES[game].name+'游戏 EXE（'+GAME_ADAPTERS[game].names.join(' / ')+ '），请到设置的游戏环境中选择安装目录。');return result.matches[0];}
+export async function requireGameExecutable(game:GameId,directory:string,signal?:AbortSignal){const result=await resolveGameInstallation(game,directory,{signal});if(!result.complete)throw new Error(result.issues.join('；'));if(result.matches.length!==1)throw new Error('未找到唯一的'+GAMES[game].name+'游戏 EXE（'+GAME_ADAPTERS[game].names.join(' / ')+ '），请到路径设置的“检查与修复”中选择安装目录。');return result.matches[0];}

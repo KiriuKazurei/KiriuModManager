@@ -264,15 +264,15 @@
       "consumers": [
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 28
+          "line": 31
         },
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 66
+          "line": 71
         },
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 69
+          "line": 74
         }
       ],
       "status": "connected"
@@ -482,7 +482,7 @@
         "file": "src/main/index.ts",
         "line": 248
       },
-      "serviceEntry": "async (game:GameId)=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');await environment.assertReady(game,true);const installation=await inspectXXMI(game,settings.games[game].xxmiRoot);if(!installation.installed)throw new Error('所选 loader 未安装，无法确认刷新键。');if(!installation.gameDirectory||path.resolve(installation.gameDirectory).toLowerCase()!==path.resolve(settings.games[game].gameDirectory).toLowerCase())throw new Error('Launcher 游戏目录与设置不一致，请先到设置的游戏环境修复。');const executables=await gameExecutables(game,settings.games[game].gameDirectory);const key=await refreshKey(installation.iniPath);const sent=await sendRefresh(path.join(app.getAppPath(),'assets','refresh-helper.ps1'),executables,key.virtualKey);return `${key.name} 刷新请求已发送到所选游戏窗口（PID ${sent.pid}）。${key.defaultKey?'未找到自定义配置，使用默认 F10。':''}请在游戏中确认效果。`;}",
+      "serviceEntry": "async (game:GameId)=>{const settings=await store.read();if(!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');await environment.assertReady(game,true);const installation=await inspectXXMI(game,settings.games[game].xxmiRoot);if(!installation.installed)throw new Error('所选 loader 未安装，无法确认刷新键。');if(!installation.gameDirectory||path.resolve(installation.gameDirectory).toLowerCase()!==path.resolve(settings.games[game].gameDirectory).toLowerCase())throw new Error('Launcher 游戏目录与设置不一致，请先到路径设置的“检查与修复”修复。');const executables=await gameExecutables(game,settings.games[game].gameDirectory);const key=await refreshKey(installation.iniPath);const sent=await sendRefresh(path.join(app.getAppPath(),'assets','refresh-helper.ps1'),executables,key.virtualKey);return `${key.name} 刷新请求已发送到所选游戏窗口（PID ${sent.pid}）。${key.defaultKey?'未找到自定义配置，使用默认 F10。':''}请在游戏中确认效果。`;}",
       "serviceCalls": [
         "store.read",
         "Object.hasOwn",
@@ -725,7 +725,7 @@
       "consumers": [
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 85
+          "line": 90
         },
         {
           "file": "src/renderer/ModImportPanel.tsx",
@@ -777,7 +777,7 @@
       "consumers": [
         {
           "file": "src/renderer/EnvironmentPanel.tsx",
-          "line": 22
+          "line": 21
         }
       ],
       "status": "connected"
@@ -815,11 +815,11 @@
       "consumers": [
         {
           "file": "src/renderer/EnvironmentPanel.tsx",
-          "line": 14
+          "line": 13
         },
         {
           "file": "src/renderer/EnvironmentPanel.tsx",
-          "line": 22
+          "line": 21
         }
       ],
       "status": "connected"
@@ -860,7 +860,7 @@
       "consumers": [
         {
           "file": "src/renderer/EnvironmentPanel.tsx",
-          "line": 21
+          "line": 20
         }
       ],
       "status": "connected"
@@ -898,7 +898,7 @@
       "consumers": [
         {
           "file": "src/renderer/EnvironmentPanel.tsx",
-          "line": 20
+          "line": 19
         }
       ],
       "status": "connected"
@@ -1252,10 +1252,6 @@
       },
       "consumers": [
         {
-          "file": "src/renderer/EnvironmentPanel.tsx",
-          "line": 32
-        },
-        {
           "file": "src/renderer/RecoveryPage.tsx",
           "line": 22
         },
@@ -1266,6 +1262,10 @@
         {
           "file": "src/renderer/ConflictPage.tsx",
           "line": 16
+        },
+        {
+          "file": "src/renderer/EnvironmentPanel.tsx",
+          "line": 31
         }
       ],
       "status": "connected"
@@ -3788,7 +3788,7 @@
       "consumers": [
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 92
+          "line": 99
         }
       ],
       "status": "connected"
@@ -3817,7 +3817,7 @@
       "consumers": [
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 95
+          "line": 102
         }
       ],
       "status": "connected"
@@ -3850,11 +3850,11 @@
         },
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 64
+          "line": 69
         },
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 74
+          "line": 79
         },
         {
           "file": "src/renderer/DesktopSettings.tsx",
@@ -3970,16 +3970,15 @@
       "resultValue": "Settings",
       "cancel": "none",
       "partialSuccess": "none",
-      "meaning": "Reject empty/unknown/type/path patch; queued latest-read merge of one game; blank Mod path restores managed default; selection retained; no file moves or loader sync",
+      "meaning": "Reject empty/unknown/type/path patch and file-as-directory input; verify supported pasted EXEs and normalize to installation directories; queued latest-read merge of one game; new XXMI/Mod targets allowed; blank Mod path restores managed default; selection retained; no file moves or loader sync",
       "handler": {
         "file": "src/main/index.ts",
         "line": 273
       },
-      "serviceEntry": "async(game,patch)=>{await environment.assertReady(game);return store.save(mergeGamePaths(await store.read(),game,patch));}",
+      "serviceEntry": "async(game,patch)=>{await environment.assertReady(game);return store.saveGamePaths(game,patch);}",
       "serviceCalls": [
         "environment.assertReady",
-        "store.save",
-        "store.read"
+        "store.saveGamePaths"
       ],
       "preload": {
         "file": "src/preload/index.ts",
@@ -3988,7 +3987,7 @@
       "consumers": [
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 57
+          "line": 61
         }
       ],
       "status": "connected"
@@ -4066,7 +4065,7 @@
         "file": "src/main/index.ts",
         "line": 231
       },
-      "serviceEntry": "async()=>{\n    for(const game of Object.keys(GAMES)as GameId[])await environment.assertReady(game,true);\n    if(environment.hasActive())throw new Error('请先等待环境修复完成，再安装管理器更新。');\n    if(mods.imports.hasActive())throw new Error('请先等待导入准备／提交完成或取消，再安装管理器更新。');\n    if(inspections.storage.hasActive())throw new Error('请先等待恢复区清理完成或取消，再安装管理器更新。');\n    if(modBrowser?.hasActiveDownloads())throw new Error('请先等待 Mod 下载和安装完成，或取消下载，再安装管理器更新。');\n    preparingUpdateInstall=true;\n    try {\n    const source=await updateSource();const result=await updater.install(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'warning',title:'安装管理器更新',message:`退出并安装 ${release.version}？`,detail:'请先保存所有未提交的编辑。程序将退出、替换完整便携目录并重新打开。用户数据和 Mod 文件保持；旧程序目录保留作回退副本。',buttons:['取消','退出并安装'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});if(result)setTimeout(()=>app.quit(),250);return result;\n    }finally{preparingUpdateInstall=false;}\n  }",
+      "serviceEntry": "async()=>{\n    for(const game of Object.keys(GAMES)as GameId[])await environment.assertReady(game,true);\n    if(environment.hasActive())throw new Error('请先等待环境修复完成，再安装管理器更新。');\n    if(mods.imports.hasActive())throw new Error('请先等待导入准备／提交完成或取消，再安装管理器更新。');\n    if(inspections.storage.hasActive())throw new Error('请先等待恢复区清理完成或取消，再安装管理器更新。');\n    if(modBrowser?.hasActiveDownloads())throw new Error('请先等待 Mod 下载和安装完成，或取消下载，再安装管理器更新。');\n    preparingUpdateInstall=true;\n    try {\n    const source=await updateSource();const result=await updater.install(source,async release=>{const choice=await dialog.showMessageBox(window!,{type:'warning',title:'安装管理器更新',message:`退出并安装 ${release.version}？`,detail:'请先保存所有未提交的编辑。程序将退出、替换完整便携目录并重新打开。用户数据和 Mod 文件保持；旧版仅临时用于失败回退，新版启动确认成功后删除。',buttons:['取消','退出并安装'],defaultId:0,cancelId:0});if(choice.response===1&&source!==await updateSource())throw new Error('更新源已改变，请重新检查。');return choice.response===1;});if(result)setTimeout(()=>app.quit(),250);return result;\n    }finally{preparingUpdateInstall=false;}\n  }",
       "serviceCalls": [
         "Object.keys",
         "environment.assertReady",
@@ -4151,7 +4150,7 @@
       "consumers": [
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 64
+          "line": 69
         }
       ],
       "status": "connected"
@@ -4187,7 +4186,7 @@
       "consumers": [
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 50
+          "line": 54
         }
       ],
       "status": "connected"
@@ -4222,7 +4221,7 @@
       "consumers": [
         {
           "file": "src/renderer/SettingsPage.tsx",
-          "line": 74
+          "line": 79
         }
       ],
       "status": "connected"
@@ -4245,20 +4244,20 @@
           "line": 9
         },
         {
-          "file": "src/renderer/InspectionJob.tsx",
-          "line": 10
-        },
-        {
           "file": "src/renderer/CompatibilityPanel.tsx",
           "line": 12
         },
         {
-          "file": "src/renderer/EnvironmentPanel.tsx",
-          "line": 17
+          "file": "src/renderer/InspectionJob.tsx",
+          "line": 10
         },
         {
           "file": "src/renderer/RecoveryPage.tsx",
           "line": 14
+        },
+        {
+          "file": "src/renderer/EnvironmentPanel.tsx",
+          "line": 16
         },
         {
           "file": "src/renderer/CharacterGallery.tsx",

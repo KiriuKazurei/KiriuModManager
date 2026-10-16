@@ -9,6 +9,7 @@ async function write(file,bytes){await fs.mkdir(path.dirname(file),{recursive:tr
 const settings={version:1,selectedGame:'endfield',games:{},desktop:{marketUrl:'',updateUrl:'',closeToTray:true}};
 for(const game of ['zzz','endfield']){const modsDirectory=path.join(run,game,'Mods');settings.games[game]={xxmiRoot:path.join(run,game,'XXMI'),gameDirectory:path.join(run,game,'Game'),modsDirectory};await write(path.join(modsDirectory,'Fixture','main.ini'),'[TextureOverrideFixture]\nhash=01234567');}
 await write(path.join(data,'settings.json'),JSON.stringify(settings));const env={...process.env,KMM_DATA_DIR:data};delete env.ELECTRON_RUN_AS_NODE;delete env.KMM_DEV_URL;let app;let main;let floating;const errors=[];
+for(const game of ['zzz','endfield'])await write(path.join(run,game,'Updated Game',game==='zzz'?'ZenlessZoneZero.exe':'Endfield.exe'),'fixture only; never execute');
 async function request(page,method,...args){return page.evaluate(({method,args})=>window.kmm[method](...args),{method,args});}
 function value(result){assert.equal(result.ok,true,result.error);return result.value;}
 async function launch(){app=await electron.launch({...(packaged?{executablePath:packageReport.executable,args:[],cwd:run}:{args:['.']}),env});main=await app.firstWindow();main.on('pageerror',error=>errors.push(error.message));await main.getByRole('heading',{name:/^Mod 库/}).waitFor();await main.waitForFunction(()=>!!window.kmm);}

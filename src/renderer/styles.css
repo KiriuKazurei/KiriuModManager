@@ -209,3 +209,11 @@ html.theme-switching,html.theme-switching *{transition:none!important}
 ::view-transition-old(root),::view-transition-new(root){animation:none;mix-blend-mode:normal}
 .log-actions{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}.log-location,.logs-panel code{overflow-wrap:anywhere}.logs-panel details{margin-top:12px}.log-entry{padding:12px 0;border-bottom:1px solid var(--line)}.log-entry code{display:block;margin-top:6px}.logs-panel>details{max-height:440px;overflow:auto}
 .logs-panel>.hint{display:block!important}
+.settings-page .path-setting-hint{display:block!important;grid-column:2/-1;margin:6px 0 12px;overflow-wrap:anywhere}
+.path-settings-note,.path-input-notice{font-size:12px;line-height:1.6}
+.path-input-notice{color:var(--accent)}
+.path-repair>summary{display:flex;align-items:center;gap:12px}
+.path-repair>summary>span{color:var(--muted);font-size:12px}
+.path-repair>.environment-panel{margin-top:18px}
+.settings-page .operation-hint{display:block!important}
+.app-update-panel .hint{display:block!important}

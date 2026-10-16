@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {zipSync,strToU8} from 'fflate';
-import {AppUpdater,assertUpdateLocation,newerVersion,resolveAppUpdate,validateAppPackage,validateUpdateManifest} from '../src/main/app-updater';
+import {AppUpdater,assertUpdateLocation,newerVersion,resolveAppUpdate,validateAppPackage,validateUpdateManifest,cleanupUpdateBackup,startUpdateHelper} from '../src/main/app-updater';
 import {validateUpdateSource} from '../src/main/web-links';
 import {defaultSettings,mergeDesktopPreferences,SettingsStore} from '../src/main/settings';
 import {acceptSubmittedPreferences} from '../src/renderer/settings-draft';
@@ -123,4 +123,71 @@ Write-Output 'Mods transfer and rollback passed.'
  await promisify(execFile)('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',driver,'-Helper',path.resolve('assets/update-helper.ps1'),'-Old',f.root,'-Prepared',prepared,'-Backup',backup,'-Failed',failed],{env,windowsHide:true,timeout:30000});
  for(const [name,bytes]of Object.entries(files))assert.equal(await fs.readFile(path.join(f.root,name),'utf8'),bytes);
  await assert.rejects(fs.stat(path.join(failed,'Mods')),{code:'ENOENT'});await assert.rejects(fs.stat(path.join(failed,'log')),{code:'ENOENT'});await validateAppPackage(f.root,'0.0.1',true);await validateAppPackage(failed,'0.0.2');
+});
+
+async function completedUpdate(){
+ const f=await fixture();await f.updater.check(source);await f.updater.download(source,async()=>true);
+ let job='';await f.updater.install(source,async()=>true,async file=>{job=file;});
+ const input=JSON.parse(await fs.readFile(job,'utf8'));
+ await fs.rename(input.installRoot,input.backup);await fs.rename(input.prepared,input.installRoot);
+ const result={stage:'success',version:input.version,installRoot:input.installRoot,backup:input.backup,message:'started'};
+ await fs.writeFile(path.join(path.dirname(job),'result.json'),JSON.stringify(result));
+ await fs.writeFile(input.resultFile,JSON.stringify(result));
+ return {...f,job,input,cache:path.dirname(input.resultFile),executable:path.join(input.installRoot,'KiriuModsManager.exe')};
+}
+test('successful updates from older helpers remove only the verified previous program and clear the backup reference',async()=>{
+ const f=await completedUpdate();await fs.mkdir(path.join(f.root,'Mods'),{recursive:true});await fs.writeFile(path.join(f.root,'Mods','keep.ini'),'user bytes');
+ assert.equal(await cleanupUpdateBackup(f.job,f.executable,'0.0.2',f.cache),true);
+ await assert.rejects(fs.stat(f.input.backup),{code:'ENOENT'});
+ assert.equal(await fs.readFile(path.join(f.root,'Mods','keep.ini'),'utf8'),'user bytes');
+ assert.equal(JSON.parse(await fs.readFile(f.input.resultFile,'utf8')).backup,undefined);
+ await validateAppPackage(f.root,'0.0.2',true);
+ assert.equal(await cleanupUpdateBackup(f.job,f.executable,'0.0.2',f.cache),true);
+});
+test('failed or unconfirmed updates and leftover user files never trigger previous-package cleanup',async()=>{
+ const f=await completedUpdate(),resultFile=path.join(path.dirname(f.job),'result.json');
+ for(const stage of ['waiting','error','rolled-back','unconfirmed']){
+  await fs.writeFile(resultFile,JSON.stringify({stage,version:'0.0.2',installRoot:f.root}));
+  assert.equal(await cleanupUpdateBackup(f.job,f.executable,'0.0.2',f.cache),false);await validateAppPackage(f.input.backup,'0.0.1');
+ }
+ await fs.writeFile(resultFile,JSON.stringify({stage:'success',version:'0.0.2',installRoot:f.root}));
+ await fs.mkdir(path.join(f.input.backup,'Mods'));await fs.writeFile(path.join(f.input.backup,'Mods','keep.ini'),'retain');
+ await assert.rejects(cleanupUpdateBackup(f.job,f.executable,'0.0.2',f.cache),/保留/);
+ assert.equal(await fs.readFile(path.join(f.input.backup,'Mods','keep.ini'),'utf8'),'retain');
+});
+test('cleanup refuses a changed backup boundary, installed identity or result destination',async()=>{
+ const f=await completedUpdate();
+ for(const patch of [{backup:f.root},{installRoot:f.run},{resultFile:path.join(f.run,'unrelated.json')}]){
+  await fs.writeFile(f.job,JSON.stringify({...f.input,...patch}));
+  await assert.rejects(cleanupUpdateBackup(f.job,f.executable,'0.0.2',f.cache),/清理范围/);
+  await validateAppPackage(f.input.backup,'0.0.1');
+ }
+});
+test('Windows helper deletes its verified temporary previous package after acknowledgement', {skip:process.platform!=='win32'},async()=>{
+ const f=await completedUpdate(),driver=path.join(f.run,'cleanup-helper.ps1');
+ await fs.writeFile(driver,`param([string]$Helper,[string]$Backup,[string]$Install)
+$ErrorActionPreference='Stop'
+$tokens=$null; $errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile($Helper,[ref]$tokens,[ref]$errors)
+if ($errors.Count) { throw 'Helper parse failed.' }
+foreach ($definition in $ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst]},$false)) { . ([scriptblock]::Create($definition.Extent.Text)) }
+Remove-PreviousPackage $Backup '0.0.1' $Install
+if (Test-Path -LiteralPath $Backup) { throw 'Previous program remained.' }
+`,'utf8');
+ const env={...process.env,PSModulePath:path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','Modules')};
+ await promisify(execFile)('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',driver,'-Helper',path.resolve('assets/update-helper.ps1'),'-Backup',f.input.backup,'-Install',f.root],{env,windowsHide:true,timeout:30000});
+ await assert.rejects(fs.stat(f.input.backup),{code:'ENOENT'});await validateAppPackage(f.root,'0.0.2');
+});
+test('Windows helper startup records native output and waits for its explicit ready signal', {skip:process.platform!=='win32'},async()=>{
+ const f=await fixture(),directory=path.join(f.run,'.kmm-update-start-test');await fs.mkdir(directory);
+ await fs.writeFile(path.join(directory,'job.json'),'{}');
+ await fs.writeFile(path.join(directory,'update-helper.ps1'),`param([string]$JobFile)
+$ErrorActionPreference='Stop'
+Get-FileHash -LiteralPath $JobFile -Algorithm SHA256 | Out-Null
+Write-Output 'helper fixture ready'
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'result.json'),'{"stage":"waiting"}')
+`);
+ await startUpdateHelper(path.join(directory,'job.json'));
+ const output=await fs.readFile(path.join(directory,'helper-output.log'));
+ assert.match(output[0]===0xff&&output[1]===0xfe?output.subarray(2).toString('utf16le'):output.toString('utf8'),/helper fixture ready/);
 });

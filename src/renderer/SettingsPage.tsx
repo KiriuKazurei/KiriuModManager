@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { GAMES, GameId, GamePaths, Settings, Inspection, Result, DeploymentProgress, DeploymentResult, RuntimeStatus } from '../shared/contracts';
-import {acceptSubmittedGamePaths,dirtyPatch,gameDraftDirty,rebaseSettingsDraft,settingsForGame,SettingsDraft} from './settings-draft';
+import {acceptSubmittedGamePaths,gamePathsPatch,rebaseSettingsDraft,settingsForGame,SettingsDraft} from './settings-draft';
+import {normalizeGamePathInput} from '../shared/path-input';
+import {EnvironmentPanel} from './EnvironmentPanel';
 function unwrap<T>(result: Result<T>): T { if (!result.ok) throw new Error(result.error); return result.value; }
 function Icon({ kind }: { kind: 'settings' | 'game' | 'folder' }) {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -14,6 +16,7 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [repairOpen,setRepairOpen] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [progress, setProgress] = useState<DeploymentProgress | null>(null);
   const [deployment, setDeployment] = useState<DeploymentResult | null>(null);
@@ -35,9 +38,10 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
   const gameId = selectedGame;
   const game = GAMES[gameId];
   const fields = settings.games[gameId];
-  const dirty = gameDraftDirty(configuration,gameId);
+  const dirty = Object.keys(gamePathsPatch(configuration,gameId)).length>0;
+  const normalizationNeeded = (Object.keys(fields) as (keyof GamePaths)[]).some(field=>normalizeGamePathInput(gameId,field,fields[field])!==fields[field]);
   useEffect(()=>{
-    const normalize=(value:string)=>value.trim().replace(/\\/g,'/').replace(/\/+$/,'').toLowerCase();
+    const normalize=(value:string)=>normalizeGamePathInput(gameId,'xxmiRoot',value).replace(/\\/g,'/').replace(/\/+$/,'').toLowerCase();
     if(inspection&&(inspection.gameId!==gameId||normalize(inspection.xxmiRoot)!==normalize(fields.xxmiRoot))){setInspection(null);setDeployment(null);setProgress(null);setMessage('');}
   },[inspection,gameId,fields.xxmiRoot]);
   function update(field: keyof GamePaths, value: string) {
@@ -47,16 +51,17 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
     setDeployment(null);
   }
   const detect = async () => {
-    const found = unwrap(await window.kmm.inspect(gameId, fields.xxmiRoot)); setInspection(found);
+    const found = unwrap(await window.kmm.inspect(gameId, normalizeGamePathInput(gameId,'xxmiRoot',fields.xxmiRoot))); setInspection(found);
     setMessage('检测完成。识别结果尚未保存，可检查后使用识别路径。');
   };
   const save = async () => {
     const game = gameId;
-    const submitted = dirtyPatch(configuration.draft.games[game], configuration.baseline.games[game]);
+    const submitted = gamePathsPatch(configuration,game);
     if (!Object.keys(submitted).length) { setMessage('无待保存更改'); return; }
     const data = unwrap(await window.kmm.saveGamePaths(game, submitted));
     setConfiguration(previous=>acceptSubmittedGamePaths(previous,data,game,submitted)); onSaved(data);
-    setMessage('配置已保存，重启后会恢复当前游戏和路径。');
+    const converted=(Object.keys(submitted) as (keyof GamePaths)[]).some(field=>submitted[field]!==data.games[game][field]);
+    setMessage(converted?'配置已保存，已将输入路径规范为目录。':'配置已保存，重启后会恢复当前游戏和路径。');
   };
   const deploy = async () => {
     setDeploying(true); setDeployment(null); setProgress({ stage: 'resolve', message: '准备读取官方发行信息…', percent: 0 });
@@ -75,21 +80,23 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
     setMessage(`路径已同步到 XXMI 并保存。原配置备份：${result.backupDirectory}`);
   };
   return <div className="settings-page" hidden={hidden}>
-      <div id="settings-main"><div className="page-heading"><div><h2>路径与加载器</h2></div><span className={`save-state ${dirty ? 'unsaved' : ''}`}>{dirty ? '有未保存的更改' : '配置已同步'}</span></div>
+      <div id="settings-main"><div className="page-heading"><div><h2>路径设置</h2></div><span className={`save-state ${dirty ? 'unsaved' : ''}`}>{dirty ? '有待保存的路径' : '路径已保存'}</span></div>
       <section className="card" aria-labelledby="paths-title"><div className="section-heading"><Icon kind="folder"/><div><h2 id="paths-title">{game.name} · 目录设置</h2><p>每款游戏分别保存路径，切换游戏不会覆盖另一工作区。</p></div></div>
         <form onSubmit={event => { event.preventDefault(); void action(save); }}>
           {([
-            ['xxmiRoot', 'XXMI 安装根目录', '选择外层根目录，其中应包含 Resources\\Bin\\XXMI Launcher.exe。'],
-            ['gameDirectory', '游戏目录', '已安装游戏的位置。“保存配置”只保存本机设置；部署或同步会配置 XXMI。'],
+            ['xxmiRoot', 'XXMI 安装根目录', '选择包含 Resources 文件夹的外层安装目录；也可粘贴 Resources\\Bin\\XXMI Launcher.exe，保存时验证并转换为根目录。'],
+            ['gameDirectory', '游戏目录', '选择游戏安装目录，也可粘贴该游戏的 EXE，保存时验证并转换为所在目录。'],
             ['modsDirectory', 'Mod 目录', '默认在管理器目录下按游戏分开保存：Mods/ZZZ 或 Mods/Endfield。可选择其它目录；保存不会改写 loader，需使用“同步路径到 XXMI”接入。'],
-          ] as const).map(([field, label, hint]) => <div className="field" key={field}><label htmlFor={field}>{label}</label><div className="path-control"><input id={field} name={field} value={fields[field]} placeholder="选择目录或输入完整路径" onChange={event => update(field, event.target.value)} disabled={busy} aria-describedby={`${field}-hint`} spellCheck={false}/><button type="button" disabled={busy} aria-label={`选择${label}`} onClick={() => void action(async () => { const selected = unwrap(await window.kmm.chooseDirectory(fields[field])); if (selected) update(field, selected); })}><Icon kind="folder"/>选择目录</button></div><p id={`${field}-hint`} className="hint">{hint}</p></div>)}
+          ] as const).map(([field, label, hint]) => <div className="field" key={field}><label htmlFor={field}>{label}</label><div className="path-control"><input id={field} name={field} value={fields[field]} placeholder="选择目录或输入完整路径" onChange={event => update(field, event.target.value)} disabled={busy} aria-describedby={`${field}-hint`} spellCheck={false}/><button type="button" disabled={busy} aria-label={`选择${label}`} onClick={() => void action(async () => { const selected = unwrap(await window.kmm.chooseDirectory(normalizeGamePathInput(gameId,field,fields[field]))); if (selected) update(field, selected); })}><Icon kind="folder"/>选择目录</button></div><p id={`${field}-hint`} className="hint path-setting-hint">{hint}</p></div>)}
+          <p className="path-settings-note">保存配置只更新管理器路径；接入现有 Mod 库需“同步路径到 XXMI”。安装位置变动时，可展开下方“检查与修复”。</p>
+          {normalizationNeeded&&<p className="path-input-notice" role="status">已识别可转换的路径，请保存配置以验证并采用目录。</p>}
           <div className="form-actions"><button type="button" disabled={busy || !fields.xxmiRoot.trim()} onClick={() => void action(detect)}>{busy ? '正在处理…' : '检测已有安装'}</button><button type="submit" className="primary" disabled={busy || !dirty}>保存配置</button></div>
         </form>
       </section>
       <div className="feedback" aria-live="polite" aria-atomic="true">{error ? <p className="error" role="alert">{error}</p> : message ? <p className="success">{message}</p> : <p className="quiet">{dirty ? '请保存更改，当前路径仅在本次窗口中生效。' : '配置保存在本机，可随时重新检测安装。'}</p>}</div>
       <details className="card deploy-card" aria-labelledby="deploy-title"><summary className="section-heading"><Icon kind="folder"/><div><h2 id="deploy-title">新用户 · 自动部署 XXMI</h2><p>需要安装加载器时展开，已有用户可直接检测与同步。</p></div></summary>
         <p className="operation-hint">请指定空的 XXMI 安装目录和已安装的游戏目录。部署会写入所选安装位置，创建 Mod 目录并保存设置，不启动游戏。已有安装请使用下方路径同步。</p>
-        <div className="deploy-actions"><button type="button" className="primary" disabled={busy || !fields.xxmiRoot.trim() || !fields.gameDirectory.trim()} onClick={() => void action(deploy)}>{deploying ? '正在部署…' : `下载并部署 ${game.importer}`}</button><button type="button" disabled={busy} onClick={() => void action(async () => { const value = unwrap(await window.kmm.checkRuntime()); setRuntime(value); setDeployment(previous => previous && ({ ...previous, runtime: value, ready: value.installed })); })}>检查运行库</button></div>
+        <div className="deploy-actions"><button type="button" className="primary" disabled={busy || normalizationNeeded || !fields.xxmiRoot.trim() || !fields.gameDirectory.trim()} onClick={() => void action(deploy)}>{deploying ? '正在部署…' : `下载并部署 ${game.importer}`}</button><button type="button" disabled={busy} onClick={() => void action(async () => { const value = unwrap(await window.kmm.checkRuntime()); setRuntime(value); setDeployment(previous => previous && ({ ...previous, runtime: value, ready: value.installed })); })}>检查运行库</button></div>
         {progress && <div className={`deployment-progress ${progress.stage === 'error' ? 'error' : ''}`} aria-live="polite"><div><span>{progress.message}</span><span>{progress.percent}%</span></div><progress max="100" value={progress.percent} aria-label="XXMI 部署进度"/>{progress.totalBytes && <small>{((progress.bytes || 0) / 1048576).toFixed(1)} / {(progress.totalBytes / 1048576).toFixed(1)} MB</small>}</div>}
         {deployment && <div className="deployment-result"><p><strong>文件部署完成</strong> · {Object.entries(deployment.versions).map(([name, version]) => `${name} ${version}`).join(' / ')}</p><p>{deployment.ready ? '运行库已检测；可通过 XXMI 检查游戏加载。' : '运行库待确认；尚不能确认 Launcher 可启动。'}</p></div>}
         {runtime && <div className={`runtime-status ${runtime.installed ? '' : 'missing'}`}><p>{runtime.message}</p>{!runtime.installed && <p>点击下载按钮后，在浏览器中下载并运行 Microsoft 官方 x64 安装器；完成后点击“检查运行库”。</p>}<button type="button" disabled={busy} onClick={() => void action(async () => unwrap(await window.kmm.openRuntimeDownload()))}>下载 Microsoft 官方运行库</button></div>}
@@ -102,10 +109,15 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
         <div className="sync-actions"><button type="button" disabled={busy || !inspection.installed} onClick={() => {
           setConfiguration(previous=>({...previous,draft:{...previous.draft,games:{...previous.draft.games,[gameId]:{...previous.draft.games[gameId],gameDirectory:inspection.gameDirectory||previous.draft.games[gameId].gameDirectory,modsDirectory:inspection.modsDirectories.length===1?inspection.modsDirectories[0]:previous.draft.games[gameId].modsDirectory}}}}));
           setMessage('已填入识别路径，请点击保存配置。');
-        }}>使用识别的游戏与 Mod 路径</button><button type="button" disabled={busy || !inspection.installed || !fields.gameDirectory.trim() || !fields.modsDirectory.trim()} onClick={() => void action(sync)}>同步路径到 XXMI</button></div>
+        }}>使用识别的游戏与 Mod 路径</button><button type="button" disabled={busy || normalizationNeeded || !inspection.installed || !fields.gameDirectory.trim() || !fields.modsDirectory.trim()} onClick={() => void action(sync)}>同步路径到 XXMI</button></div>
         <p className="operation-hint">同步会更新所选游戏路径与首个递归 Mod 读取目录，并保存对应 Launcher 覆盖设置。其它读取目录与游戏配置保留；原文件备份在安装目录的 .kmm-backups 下。</p>
       </> : <div className="empty-state"><Icon kind="folder"/><p>选择 XXMI 根目录后，点击“检测已有安装”。</p><small>检测只读；保存配置不会修改外部安装。加载与注入由 XXMI 完成。</small></div>}
-      </section></div>
+      </section>
+      <details className="card path-repair" onToggle={event=>setRepairOpen(event.currentTarget.open)}>
+        <summary><h2>检查与修复</h2><span>安装位置变动或启动异常时使用</span></summary>
+        <p>检查已保存的配置；上方未保存的修改不会用于本次检查。修复会先展示差异，再由你确认。</p>
+        <EnvironmentPanel key={gameId} gameId={gameId} hidden={hidden||!repairOpen} onSaved={onSaved} onBusy={setBusy}/>
+      </details></div>
   </div>;
 }
 

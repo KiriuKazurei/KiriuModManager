@@ -9,6 +9,7 @@ import { validateUpdateSource } from './web-links';
 import type { AppUpdateRelease, AppUpdateStatus } from '../shared/contracts';
 import type { FetchClient } from './releases';
 import {logEvent} from './application-log';
+import {writeAtomicJson} from './atomic-json';
 
 const MAX_ARCHIVE=512*1024**2;
 export function versionParts(value:unknown):number[] {
@@ -136,17 +137,62 @@ export class AppUpdater {
 export async function startUpdateHelper(job:string):Promise<void> {
  const directory=path.dirname(job);const helper=path.join(directory,'update-helper.ps1');await assertNoLinks(helper);
  const powershell=path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
- const child=spawn(powershell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',helper,'-JobFile',job],{cwd:directory,windowsHide:true,detached:true,stdio:'ignore'});
- await new Promise<void>((resolve,reject)=>{child.once('error',reject);child.once('spawn',resolve);});child.unref();
- for(let i=0;i<200;i++){
+ const quote=(value:string)=>"'"+value.replace(/'/g,"''")+"'";
+ const runner=path.join(directory,'helper-runner.ps1');
+ await fs.writeFile(runner,'\ufeff'+`& ${quote(helper)} -JobFile ${quote(job)} *> ${quote(path.join(directory,'helper-output.log'))}`,{flag:'wx'});
+ const argumentsText=`-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "${runner}"`;
+ const script=`$ErrorActionPreference='Stop'; $helperProcess=Start-Process -FilePath ${quote(powershell)} -ArgumentList ${quote(argumentsText)} -WorkingDirectory ${quote(directory)} -WindowStyle Hidden -PassThru; [IO.File]::WriteAllText(${quote(path.join(directory,'helper.pid'))},[string]$helperProcess.Id)`;
+ const output=await fs.open(path.join(directory,'helper-launch.log'),'wx');
+ // A short bootstrap starts the hidden helper independently of Electron's process lifetime.
+ const child=spawn(powershell,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{cwd:directory,env:{...process.env,PSModulePath:path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','Modules')},windowsHide:true,stdio:['ignore',output.fd,output.fd]});
+ try {await new Promise<void>((resolve,reject)=>{child.once('error',reject);child.once('spawn',resolve);});}
+ finally {await output.close();}
+ child.unref();
+ // The helper rehashes both complete Electron packages before it is ready to replace anything.
+ for(let i=0;i<2400;i++){
   try{const status=JSON.parse(await fs.readFile(path.join(directory,'result.json'),'utf8'));if(status.stage==='waiting')return;if(status.stage==='error')throw new Error(status.message);}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT'&&!(error instanceof SyntaxError))throw error;}
+  if(child.exitCode!==null&&child.exitCode!==0){
+   const status=await fs.readFile(path.join(directory,'result.json'),'utf8').then(text=>JSON.parse(text)).catch(()=>null);
+   if(status?.stage==='waiting')return;
+   throw new Error(`更新 helper 启动失败（${child.exitCode}），请检查事务目录中的 helper-launch.log。`);
+  }
   await new Promise(resolve=>setTimeout(resolve,50));
  }throw new Error('更新 helper 未就绪；程序保持运行，请检查更新日志。');
 }
-export async function acknowledgeUpdate(executable:string,version:string):Promise<void> {
+export async function cleanupUpdateBackup(jobFile:string,executable:string,version:string,cacheDirectory:string):Promise<boolean> {
+ if(path.basename(jobFile)!=='job.json'||!/^\.kmm-update-[\w-]+$/.test(path.basename(path.dirname(jobFile))))throw new Error('更新事务位置无效。');
+ await assertNoLinks(jobFile);
+ const input=JSON.parse(await fs.readFile(jobFile,'utf8'));
+ const same=(a:string,b:string)=>path.resolve(a).toLowerCase()===path.resolve(b).toLowerCase();
+ if(input.schemaVersion!==1||input.version!==version||!same(path.join(input.installRoot,'KiriuModsManager.exe'),executable)||!same(path.dirname(input.installRoot),path.dirname(path.dirname(jobFile)))||!same(path.dirname(input.backup),path.dirname(input.installRoot))||!/^\.kmm-previous-[a-f0-9-]{36}$/.test(path.basename(input.backup))||!same(input.resultFile,path.join(cacheDirectory,'last-update.json')))throw new Error('更新清理范围与本次安装不一致。');
+ const resultFile=path.join(path.dirname(jobFile),'result.json');await assertNoLinks(resultFile);
+ const result=JSON.parse(await fs.readFile(resultFile,'utf8'));
+ if(result.stage!=='success'||result.version!==version||!same(result.installRoot,input.installRoot))return false;
+ await validateAppPackage(input.installRoot,version,true);
+ try {await fs.lstat(input.backup);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return true;throw error;}
+ await validateAppPackage(input.backup,input.currentVersion);
+ await assertNoLinks(input.backup);
+ await fs.rm(input.backup,{recursive:true});
+ const completed={...result,backup:undefined,message:'Update completed and the new window was loaded; previous program removed.'};
+ await writeAtomicJson(resultFile,JSON.stringify(completed));
+ await writeAtomicJson(input.resultFile,JSON.stringify(completed));
+ return true;
+}
+export async function acknowledgeUpdate(executable:string,version:string,cacheDirectory:string):Promise<void> {
  const job=process.env.KMM_UPDATE_JOB;if(!job)return;delete process.env.KMM_UPDATE_JOB;
  if(path.basename(job)!=='job.json'||!path.basename(path.dirname(job)).startsWith('.kmm-update-'))return;
  await assertNoLinks(job);const input=JSON.parse(await fs.readFile(job,'utf8'));
  if(path.resolve(input.installRoot,'KiriuModsManager.exe').toLowerCase()!==path.resolve(executable).toLowerCase()||input.version!==version)return;
  await fs.writeFile(path.join(path.dirname(job),'started.json'),JSON.stringify({version,pid:process.pid}),{flag:'wx'});
+ // Older installed helpers retain the previous program. Finish their successful upgrade too.
+ void (async()=>{
+  for(let i=0;i<120;i++){
+   try {
+    const result=JSON.parse(await fs.readFile(path.join(path.dirname(job),'result.json'),'utf8'));
+    if(result.stage==='success'){await cleanupUpdateBackup(job,executable,version,cacheDirectory);return;}
+    if(['error','rolled-back','unconfirmed'].includes(result.stage))return;
+   }catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT'&&!(error instanceof SyntaxError))throw error;}
+   await new Promise(resolve=>setTimeout(resolve,500));
+  }
+ })().catch(error=>{void logEvent('updater','update.cleanup-failed',{message:(error as Error).message},'warning');});
 }

@@ -5,6 +5,7 @@ import { validateWebUrl, validateUpdateSource } from './web-links';
 import {writeAtomicJson,writeAtomicFile} from './atomic-json';
 import {createHash} from 'node:crypto';
 import {assertNoLinks} from './archive';
+import {validateGamePathInput} from './path-input';
 export function defaultSettings(installDirectory?:string): Settings {
   const empty = (folder:string): GamePaths => ({ xxmiRoot: '', gameDirectory: '', modsDirectory: installDirectory?path.join(installDirectory,'Mods',folder):'' });
   return { version: 1, selectedGame: 'zzz', games: { zzz: empty('ZZZ'), endfield: empty('Endfield') } };
@@ -75,6 +76,17 @@ export class SettingsStore {
   read(): Promise<Settings> {
     const task=this.pending.then(()=>this.readCurrent());this.pending=task.catch(()=>{});return task;
   }
+  saveGamePaths(game:GameId,patch:unknown):Promise<Settings>{
+    const fields=patchFields(patch,['xxmiRoot','gameDirectory','modsDirectory']);
+    const task=this.pending.then(async()=>{
+      const current=await this.readCurrent();
+      if(typeof game!=='string'||!Object.hasOwn(GAMES,game))throw new Error('不支持的游戏。');
+      const normalized:Partial<GamePaths>={};
+      for(const field of Object.keys(fields) as (keyof GamePaths)[])normalized[field]=await validateGamePathInput(game,field,fields[field]);
+      return this.writeSettings(mergeGamePaths(current,game,normalized));
+    });
+    this.pending=task.catch(()=>{});return task;
+  }
   // Environment transactions merge only their game and reject an external edit before publication.
   saveGamePathsIfCurrent(game:GameId,expected:GamePaths,next:GamePaths):Promise<Settings>{
     const task=this.pending.then(async()=>{
@@ -90,13 +102,14 @@ export class SettingsStore {
   }
   save(input: unknown): Promise<Settings> {
     const settings = validateSettings(input);
-    const task = this.pending.then(async () => {
-      await this.withDefaultMods(settings);
-      await fs.mkdir(path.dirname(this.file), { recursive: true });
-      await writeAtomicJson(this.file,JSON.stringify(settings,null,2));
-      return settings;
-    });
+    const task = this.pending.then(() => this.writeSettings(settings));
     this.pending = task.catch(() => {});
     return task;
+  }
+  private async writeSettings(settings:Settings):Promise<Settings>{
+    await this.withDefaultMods(settings);
+    await fs.mkdir(path.dirname(this.file), {recursive:true});
+    await writeAtomicJson(this.file,JSON.stringify(settings,null,2));
+    return settings;
   }
 }

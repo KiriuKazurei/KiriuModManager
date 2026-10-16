@@ -1,6 +1,6 @@
 {
   "name": "kiriu-mods-manager",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "description": "本地双游戏 Mod 管理器",
   "main": "dist/main/index.js",
@@ -36,6 +36,7 @@
     "smoke:preset-workflows": "node scripts/smoke-preset-workflows.mjs",
     "smoke:imports": "node scripts/smoke-import-workflows.mjs",
     "smoke:environment": "node scripts/smoke-environment.mjs",
+    "smoke:path-settings": "node scripts/smoke-path-settings.mjs",
     "compat": "tsx dev/compat-sdk/cli/index.ts",
     "compat:typecheck": "tsc --noEmit -p dev/compat-sdk/tsconfig.json",
     "compat:verify": "tsx dev/compat-sdk/cli/verify.ts",

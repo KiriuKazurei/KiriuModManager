@@ -11,6 +11,7 @@ const root = path.join(run, 'XXMI'); const game = path.join(run, 'Game');
 const data = path.join(run, 'data'); const mods = path.join(root, 'ZZMI', 'Mods');
 await fs.mkdir(path.join(root, 'Resources', 'Bin'), { recursive: true });
 await fs.mkdir(mods, { recursive: true }); await fs.mkdir(game);
+await fs.writeFile(path.join(game,'ZenlessZoneZero.exe'),'fixture only; never execute');
 await fs.writeFile(path.join(root, 'Resources', 'Bin', 'XXMI Launcher.exe'), 'fixture only; never execute');
 await fs.writeFile(path.join(root, 'XXMI Launcher Config.json'), JSON.stringify({ Launcher: { enabled_importers: ['ZZMI', 'EFMI'] }, Importers: { ZZMI: { Importer: { importer_folder: 'ZZMI/', game_folder: game } }, EFMI: { Importer: { importer_folder: 'EFMI/', game_folder: '' } } } }));
 await fs.writeFile(path.join(root, 'ZZMI', 'd3dx.ini'), '[Include]\ninclude_recursive = Mods\nexclude_recursive = DISABLED*\n');
@@ -23,7 +24,7 @@ async function launch() {
   const page = await app.firstWindow();
   page.on('pageerror', error => errors.push(error.message));
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('heading', { name: '路径与加载器', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '路径设置', exact: true }).waitFor();
   await app.evaluate(async ({ BrowserWindow }) => {
     const win = BrowserWindow.getAllWindows()[0];
     const deadline = Date.now() + 10000;

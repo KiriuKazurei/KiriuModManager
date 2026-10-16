@@ -132,7 +132,7 @@ export class ModService {
   private async load(game: GameId,readOnly=false): Promise<LibraryData> {
     this.file(game);
     const config = await this.paths(game); const root = config.modsDirectory;
-    if (!root || !path.isAbsolute(root)) throw new Error('请先在路径与加载器中保存该游戏的 Mod 目录。');
+    if (!root || !path.isAbsolute(root)) throw new Error('请先在路径设置中保存该游戏的 Mod 目录。');
     if(path.resolve(root).toLowerCase()===path.parse(path.resolve(root)).root.toLowerCase())throw new Error('Mod 目录不能直接使用磁盘根目录，请选择专用文件夹。');
     await this.operations.assertReady(game,root);
     await assertNoLinks(root);
@@ -188,7 +188,7 @@ export class ModService {
       const inspection=await inspectXXMI(game, config.xxmiRoot); loaderMatched=inspection.modsDirectories.some(directory=>relation(directory.toLowerCase(), data.root.toLowerCase()));
       if (inspection.importerExists) { const ini=await fs.readFile(inspection.iniPath,'utf8'); excludeMatched=/^\s*exclude_recursive\s*=\s*DISABLED\*\s*(?:;.*)?$/im.test(ini); }
     } catch { /* reports the missing loader below */ }
-    if (!loaderMatched) warnings.push('当前 Mod 目录不在所选 loader 已确认的读取范围。管理操作仍可保存，但不代表游戏会加载；请到路径与加载器同步目录。');
+    if (!loaderMatched) warnings.push('当前 Mod 目录不在所选 loader 已确认的读取范围。管理操作仍可保存，但不代表游戏会加载；请到路径设置同步目录。');
     if (!excludeMatched) warnings.push('未确认 loader 的 exclude_recursive = DISABLED* 规则。目录停用不代表游戏已停用，请检查 XXMI 配置。');
     for(const group of data.exclusiveGroups||[])if(mods.filter(mod=>group.modIds.includes(mod.id)&&mod.enabled).length>1)warnings.push(`互斥组“${group.name}”有多个实际启用成员，请明确选择一个启用。`);
     const library={ gameId:game, root:data.root, mods:mods.sort((a,b)=>a.name.localeCompare(b.name,'zh-CN')),exclusiveGroups:data.exclusiveGroups||[], warnings, loaderMatched, excludeMatched, characters:[...new Set([...INITIAL_CHARACTERS[game],...data.groups.character,...mods.map(mod=>mod.metadata.character).filter(Boolean)])], categories:[...new Set([...data.groups.category,...mods.map(mod=>mod.metadata.category).filter(Boolean)])], appearances:[...new Set([...data.groups.appearance,...mods.map(mod=>mod.metadata.appearance).filter(Boolean)])] };

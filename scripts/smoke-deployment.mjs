@@ -16,7 +16,7 @@ async function launch(inject = false) {
   app = await electron.launch({ args: ['.'], env });
   const page = await app.firstWindow(); page.on('pageerror', error => pageErrors.push(error.message));
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('heading', { name: '路径与加载器', exact: true }).waitFor();
+  await page.getByRole('heading', { name: '路径设置', exact: true }).waitFor();
   await app.evaluate(async ({ BrowserWindow }) => {
     const win = BrowserWindow.getAllWindows()[0]; for (let i = 0; i < 200 && !win.isVisible(); i++) await new Promise(resolve => setTimeout(resolve, 50));
     if (!win.isVisible()) throw new Error('Electron window is not visible');

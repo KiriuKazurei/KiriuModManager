@@ -1,4 +1,5 @@
 import type {DesktopPreferences,GameId,GamePaths,Settings} from '../shared/contracts';
+import {normalizeGamePathInput} from '../shared/path-input';
 
 const games:GameId[]=['zzz','endfield'];
 const pathFields:(keyof GamePaths)[]=['xxmiRoot','gameDirectory','modsDirectory'];
@@ -19,6 +20,11 @@ export function settingsForGame(state:SettingsDraft,latest:Settings,game:GameId)
   return {...latest,selectedGame:game,games:{...latest.games,[game]:fields}};
 }
 export function gameDraftDirty(state:SettingsDraft,game:GameId):boolean {return pathFields.some(field=>state.draft.games[game][field]!==state.baseline.games[game][field]);}
+export function gamePathsPatch(state:SettingsDraft,game:GameId):Partial<GamePaths> {
+  const fields=state.draft.games[game],patch=dirtyPatch(fields,state.baseline.games[game]);
+  for(const field of pathFields)if(normalizeGamePathInput(game,field,fields[field])!==fields[field])patch[field]=fields[field];
+  return patch;
+}
 const preferenceFields:(keyof DesktopPreferences)[]=['marketUrl','updateUrl','closeToTray','updateSourceUrl'];
 function assignPreference<K extends keyof DesktopPreferences>(target:DesktopPreferences,field:K,value:DesktopPreferences[K]){target[field]=value;}
 export function desktopPreferences(settings:Settings):DesktopPreferences {return settings.desktop||{marketUrl:'',updateUrl:'',closeToTray:true};}

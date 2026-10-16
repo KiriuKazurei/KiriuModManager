@@ -26,7 +26,7 @@ function Assert-Within([string]$Base, [string]$Target) {
 }
 function Write-Result([string]$Stage, [string]$Message) {
     $result = @{stage=$Stage; message=$Message; time=[DateTime]::UtcNow.ToString('o')}
-    if ($job) { $result.version=$job.version; $result.backup=$job.backup; $result.installRoot=$job.installRoot }
+    if ($job) { $result.version=$job.version; $result.installRoot=$job.installRoot; if (Test-Path -LiteralPath $job.backup) { $result.backup=$job.backup } }
     $bytes = [Text.Encoding]::UTF8.GetBytes(($result | ConvertTo-Json))
     [IO.File]::WriteAllBytes($resultPath + '.tmp',$bytes)
     Move-Item -LiteralPath ($resultPath + '.tmp') -Destination $resultPath -Force
@@ -80,6 +80,20 @@ function Move-WithRetry([string]$From, [string]$To) {
         catch { if ($attempt -eq 59) { throw }; Start-Sleep -Milliseconds 500 }
     }
 }
+function Remove-PreviousPackage([string]$Backup, [string]$Version, [string]$InstallRoot) {
+    $resolvedBackup = [IO.Path]::GetFullPath($Backup)
+    $resolvedInstall = [IO.Path]::GetFullPath($InstallRoot)
+    if ([IO.Path]::GetDirectoryName($resolvedBackup) -ne [IO.Path]::GetDirectoryName($resolvedInstall) -or [IO.Path]::GetFileName($resolvedBackup) -notmatch '^\.kmm-previous-[a-f0-9-]{36}$') { throw 'Invalid previous package boundary.' }
+    # Only the verified old program is removable. Remaining user directories or extra files block cleanup.
+    Assert-Package $resolvedBackup $Version
+    Assert-PlainPath $resolvedBackup
+    Remove-Item -LiteralPath $resolvedBackup -Recurse -Force
+}
+function Show-UpdateFailure([string]$Message) {
+    try { $shell = New-Object -ComObject WScript.Shell; $null = $shell.Popup($Message, 30, 'Kiriu Mod Manager - Update failed', 16) }
+    catch { # The durable update result remains available if the desktop cannot display a message.
+    }
+}
 function Start-App {
     $env:KMM_UPDATE_JOB = $JobFile
     try { return Start-Process -FilePath (Join-Path $job.installRoot 'KiriuModsManager.exe') -WorkingDirectory $job.installRoot -WindowStyle Hidden -PassThru }
@@ -127,7 +141,12 @@ try {
         $ackPath = Join-Path $transaction 'started.json'
         if (Test-Path -LiteralPath $ackPath) {
             $ack = Get-Content -LiteralPath $ackPath -Encoding UTF8 -Raw | ConvertFrom-Json
-            if ($ack.version -eq $job.version -and $ack.pid -eq $newApp.Id) { Write-Result 'success' 'Update completed and the new window was loaded.'; exit 0 }
+            if ($ack.version -eq $job.version -and $ack.pid -eq $newApp.Id) {
+                try { Remove-PreviousPackage $job.backup $job.currentVersion $job.installRoot }
+                catch { Write-Result 'success' ('Update completed; previous program cleanup needs attention. ' + $_.Exception.Message); exit 0 }
+                Write-Result 'success' 'Update completed and the new window was loaded; previous program removed.'
+                exit 0
+            }
         }
         if ($newApp.HasExited) { throw 'The updated application exited before startup completed.' }
         Start-Sleep -Milliseconds 500
@@ -144,9 +163,10 @@ try {
                 Move-WithRetry $job.installRoot (Join-Path $transaction 'failed-package')
             }
             Move-WithRetry $job.backup $job.installRoot
-            $null = Start-App
             Write-Result 'rolled-back' ('Update failed; previous package restored. ' + $failure)
+            $null = Start-App
         } else { Write-Result 'error' $failure }
     } catch { Write-Result 'error' ('Recovery needs manual attention; all package directories retained. ' + $failure + ' / ' + $_.Exception.Message) }
+    Show-UpdateFailure ('Update failed. Check the manager update result for recovery details.' + [Environment]::NewLine + $failure)
     exit 1
 }
