@@ -1,3 +1,4 @@
+import {FeedbackNotice} from './Notices';
 import {useEffect,useRef,useState} from 'react';
 import {GAMES,type GameId} from '../shared/contracts';
 import type {InspectionJob} from '../shared/inspections';
@@ -12,4 +13,4 @@ export function useInspectionJob(game:GameId){
  const cancel=async()=>{if(!job)return;try{setJob(unwrap(await window.kmm.cancelInspectionJob(job.id)));}catch(e){setError((e as Error).message);}};
  return {job,error,start,cancel,clear:()=>{generation.current++;const last=current.current;if(last?.stage==='running')void window.kmm.cancelInspectionJob(last.id);current.current=null;setJob(null);setError('');},setError};
 }
-export function InspectionProgress({job,error,onCancel}:{job:InspectionJob|null;error:string;onCancel:()=>void}){return <div className="inspection-progress" aria-live="polite">{error&&<p className="error" role="alert">{error}</p>}{job&&<><p role="status">{job.stage==='running'?'读取中':job.stage==='complete'?'读取完成':job.stage==='canceled'?'已取消':'读取失败'}{job.progress!==({running:'读取中',complete:'读取完成',canceled:'已取消',error:'读取失败'}[job.stage])?' · '+job.progress:''}{job.stale?' · 结果已过期，请重新读取':''}</p><small>{GAMES[job.gameId].name} · {job.paths.modsDirectory||'未配置 Mod 目录'} · {new Date(job.observedAt).toLocaleString('zh-CN')}</small>{job.stage==='running'&&<button onClick={onCancel}>取消读取</button>}</>}</div>;}
+export function InspectionProgress({job,error,onCancel}:{job:InspectionJob|null;error:string;onCancel:()=>void}){return <div className="inspection-progress" aria-live="polite"><FeedbackNotice error={error||(job?.stage==='error'?job.progress:'')}/>{job&&<><p role="status">{job.stage==='running'?'读取中':job.stage==='complete'?'读取完成':job.stage==='canceled'?'已取消':'读取失败'}{job.stage!=='error'&&job.progress!==({running:'读取中',complete:'读取完成',canceled:'已取消',error:'读取失败'}[job.stage])?' · '+job.progress:''}{job.stale?' · 结果已过期，请重新读取':''}</p><small>{GAMES[job.gameId].name} · {job.paths.modsDirectory||'未配置 Mod 目录'} · {new Date(job.observedAt).toLocaleString('zh-CN')}</small>{job.stage==='running'&&<button onClick={onCancel}>取消读取</button>}</>}</div>;}

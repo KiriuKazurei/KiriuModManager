@@ -1,3 +1,4 @@
+import {FeedbackNotice} from './Notices';
 import { useEffect, useState } from 'react';
 import { GAMES, GameId, GamePaths, Settings, Inspection, Result, DeploymentProgress, DeploymentResult, RuntimeStatus } from '../shared/contracts';
 import {acceptSubmittedGamePaths,gamePathsPatch,rebaseSettingsDraft,settingsForGame,SettingsDraft} from './settings-draft';
@@ -84,8 +85,8 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
       <section className="card" aria-labelledby="paths-title"><div className="section-heading"><Icon kind="folder"/><div><h2 id="paths-title">{game.name} · 目录设置</h2><p>每款游戏分别保存路径，切换游戏不会覆盖另一工作区。</p></div></div>
         <form onSubmit={event => { event.preventDefault(); void action(save); }}>
           {([
-            ['xxmiRoot', 'XXMI 安装根目录', '选择包含 Resources 文件夹的外层安装目录；也可粘贴 Resources\\Bin\\XXMI Launcher.exe，保存时验证并转换为根目录。'],
-            ['gameDirectory', '游戏目录', '选择游戏安装目录，也可粘贴该游戏的 EXE，保存时验证并转换为所在目录。'],
+            ['xxmiRoot', 'XXMI 安装根目录', '可选择外层安装目录、Resources、Resources\\Bin，或粘贴 XXMI Launcher.exe 路径；保存时验证并统一为外层根目录。'],
+            ['gameDirectory', '游戏目录', '可选择外层安装目录、EXE 所在目录，或粘贴该游戏的 EXE 路径；找到唯一匹配后，保存为实际 EXE 所在目录。'],
             ['modsDirectory', 'Mod 目录', '默认在管理器目录下按游戏分开保存：Mods/ZZZ 或 Mods/Endfield。可选择其它目录；保存不会改写 loader，需使用“同步路径到 XXMI”接入。'],
           ] as const).map(([field, label, hint]) => <div className="field" key={field}><label htmlFor={field}>{label}</label><div className="path-control"><input id={field} name={field} value={fields[field]} placeholder="选择目录或输入完整路径" onChange={event => update(field, event.target.value)} disabled={busy} aria-describedby={`${field}-hint`} spellCheck={false}/><button type="button" disabled={busy} aria-label={`选择${label}`} onClick={() => void action(async () => { const selected = unwrap(await window.kmm.chooseDirectory(normalizeGamePathInput(gameId,field,fields[field]))); if (selected) update(field, selected); })}><Icon kind="folder"/>选择目录</button></div><p id={`${field}-hint`} className="hint path-setting-hint">{hint}</p></div>)}
           <p className="path-settings-note">保存配置只更新管理器路径；接入现有 Mod 库需“同步路径到 XXMI”。安装位置变动时，可展开下方“检查与修复”。</p>
@@ -93,7 +94,7 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
           <div className="form-actions"><button type="button" disabled={busy || !fields.xxmiRoot.trim()} onClick={() => void action(detect)}>{busy ? '正在处理…' : '检测已有安装'}</button><button type="submit" className="primary" disabled={busy || !dirty}>保存配置</button></div>
         </form>
       </section>
-      <div className="feedback" aria-live="polite" aria-atomic="true">{error ? <p className="error" role="alert">{error}</p> : message ? <p className="success">{message}</p> : <p className="quiet">{dirty ? '请保存更改，当前路径仅在本次窗口中生效。' : '配置保存在本机，可随时重新检测安装。'}</p>}</div>
+      <div className="feedback" aria-live="polite" aria-atomic="true"><FeedbackNotice error={error} message={message}/><p className="quiet">{dirty?'请保存更改，当前路径仅在本次窗口中生效。':'配置保存在本机，可随时重新检测安装。'}</p></div>
       <details className="card deploy-card" aria-labelledby="deploy-title"><summary className="section-heading"><Icon kind="folder"/><div><h2 id="deploy-title">新用户 · 自动部署 XXMI</h2><p>需要安装加载器时展开，已有用户可直接检测与同步。</p></div></summary>
         <p className="operation-hint">请指定空的 XXMI 安装目录和已安装的游戏目录。部署会写入所选安装位置，创建 Mod 目录并保存设置，不启动游戏。已有安装请使用下方路径同步。</p>
         <div className="deploy-actions"><button type="button" className="primary" disabled={busy || normalizationNeeded || !fields.xxmiRoot.trim() || !fields.gameDirectory.trim()} onClick={() => void action(deploy)}>{deploying ? '正在部署…' : `下载并部署 ${game.importer}`}</button><button type="button" disabled={busy} onClick={() => void action(async () => { const value = unwrap(await window.kmm.checkRuntime()); setRuntime(value); setDeployment(previous => previous && ({ ...previous, runtime: value, ready: value.installed })); })}>检查运行库</button></div>
@@ -101,7 +102,7 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
         {deployment && <div className="deployment-result"><p><strong>文件部署完成</strong> · {Object.entries(deployment.versions).map(([name, version]) => `${name} ${version}`).join(' / ')}</p><p>{deployment.ready ? '运行库已检测；可通过 XXMI 检查游戏加载。' : '运行库待确认；尚不能确认 Launcher 可启动。'}</p></div>}
         {runtime && <div className={`runtime-status ${runtime.installed ? '' : 'missing'}`}><p>{runtime.message}</p>{!runtime.installed && <p>点击下载按钮后，在浏览器中下载并运行 Microsoft 官方 x64 安装器；完成后点击“检查运行库”。</p>}<button type="button" disabled={busy} onClick={() => void action(async () => unwrap(await window.kmm.openRuntimeDownload()))}>下载 Microsoft 官方运行库</button></div>}
       </details>
-      <section className="card detection" aria-labelledby="detect-title"><div className="section-heading"><Icon kind="settings"/><div><h2 id="detect-title">已有安装状态</h2><p>只读检查 Launcher、{game.importer} 组件和实际递归读取目录。</p></div><span className={`badge ${inspection?.installed ? 'good' : ''}`}>{inspection ? inspection.installed ? '检测到组件' : '未安装 / 不完整' : '尚未检测'}</span></div>
+      <section className="card detection" aria-labelledby="detect-title"><div className="section-heading"><Icon kind="settings"/><div><h2 id="detect-title">已有安装状态</h2><p>检查 XXMI 根目录下的 {game.importer} 目录；缺少时请先打开 XXMI 手动安装，再重新检测。</p></div><span className={`badge ${inspection?.installed ? 'good' : ''}`}>{inspection ? inspection.installed ? '检测到组件' : inspection.launcherExists ? '待安装组件' : '未找到 Launcher' : '尚未检测'}</span></div>
       {inspection ? <>
         <dl className="result-grid"><dt>Launcher</dt><dd>{inspection.launcherExists ? '已找到' : '未找到'}<code>{inspection.launcherPath}</code></dd><dt>{game.importer} 组件</dt><dd>{inspection.importerExists ? '目录存在' : '未安装'}<code>{inspection.importerDirectory}</code></dd><dt>游戏目录</dt><dd><code>{inspection.gameDirectory || '未配置'}</code></dd><dt>loader 读取目录</dt><dd>{inspection.modsDirectories.length ? inspection.modsDirectories.map((directory, index) => <div className="detected-mod" key={directory}><code>{directory}</code><span>{inspection.modsExist[index] ? '目录存在' : '目录不存在'}</span><button type="button" disabled={busy} onClick={() => update('modsDirectory', directory)}>使用此 Mod 目录</button></div>) : '无法确认'}</dd></dl>
         {inspection.warnings.length > 0 && <ul className="warnings">{inspection.warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}
@@ -109,7 +110,7 @@ export function SettingsPage({ initialSettings, gameId: selectedGame, hidden, on
         <div className="sync-actions"><button type="button" disabled={busy || !inspection.installed} onClick={() => {
           setConfiguration(previous=>({...previous,draft:{...previous.draft,games:{...previous.draft.games,[gameId]:{...previous.draft.games[gameId],gameDirectory:inspection.gameDirectory||previous.draft.games[gameId].gameDirectory,modsDirectory:inspection.modsDirectories.length===1?inspection.modsDirectories[0]:previous.draft.games[gameId].modsDirectory}}}}));
           setMessage('已填入识别路径，请点击保存配置。');
-        }}>使用识别的游戏与 Mod 路径</button><button type="button" disabled={busy || normalizationNeeded || !inspection.installed || !fields.gameDirectory.trim() || !fields.modsDirectory.trim()} onClick={() => void action(sync)}>同步路径到 XXMI</button></div>
+        }}>使用识别的游戏与 Mod 路径</button><button type="button" disabled={busy || normalizationNeeded || !inspection.installed || !inspection.iniExists || !fields.gameDirectory.trim() || !fields.modsDirectory.trim()} onClick={() => void action(sync)}>同步路径到 XXMI</button></div>
         <p className="operation-hint">同步会更新所选游戏路径与首个递归 Mod 读取目录，并保存对应 Launcher 覆盖设置。其它读取目录与游戏配置保留；原文件备份在安装目录的 .kmm-backups 下。</p>
       </> : <div className="empty-state"><Icon kind="folder"/><p>选择 XXMI 根目录后，点击“检测已有安装”。</p><small>检测只读；保存配置不会修改外部安装。加载与注入由 XXMI 完成。</small></div>}
       </section>

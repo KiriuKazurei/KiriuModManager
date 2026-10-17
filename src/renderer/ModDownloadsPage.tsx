@@ -1,3 +1,4 @@
+import {FeedbackNotice} from './Notices';
 import {ModImportPanel} from './ModImportPanel';
 import {useEffect,useState} from 'react';
 import type {GameId,ModBrowserStatus,ModDownload,ModDownloadAction,ModDownloadInstallPlan,ModInstallDestination} from '../shared/contracts';
@@ -27,7 +28,7 @@ export function ModDownloadsPage({modsRoots,onLibrary,onBrowse}:{modsRoots:Recor
   <div className="download-summary"><span><strong>{tasks.filter(active).length}</strong> 正在处理</span><span><strong>{tasks.filter(waiting).length}</strong> 等待安装</span><span><strong>{tasks.filter(task=>task.archiveReady).length}</strong> 完整资源</span><span><strong>{tasks.length}</strong> 下载记录</span></div>
   <div className="download-filters" role="group" aria-label="筛选下载记录">{filters.map(item=><button key={item} aria-pressed={filter===item} className={filter===item?'active':''} onClick={()=>setFilter(item)}>{item}</button>)}</div>
   {preparing&&<ModImportPanel key={preparing.taskId} gameId={preparing.gameId} source={{kind:'download',taskId:preparing.taskId}} onClose={()=>setPreparing(null)} onComplete={()=>{void window.kmm.modBrowserStatus().then(result=>{if(result.ok)setStatus(result.value);});}}/>}
-  {(error||status?.error)&&<p className="error" role="alert">{error||status?.error}</p>}
+  <FeedbackNotice error={error||status?.error}/>
   {!visible.length&&<div className="empty-state"><h2>{tasks.length?'此分类暂无记录':'暂无下载记录'}</h2><p>在获取Mod页面选择 GameBanana 托管的 ZIP、7z 或 RAR 下载。</p></div>}
   <div className="download-list">{visible.map(task=>{
    const busy=busyId===task.id;const ended=!active(task);const currentPlan=plans[task.id];const installable=ended&&task.archiveReady&&task.stage!=='complete'&&task.stage!=='waiting-directory';

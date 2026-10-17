@@ -26,6 +26,24 @@ async function fixture(game:GameId='zzz',encoding:'utf8'|'utf16le'='utf8'){
  return {run,data,store,root,old,next,mods,importer,exe,config,ini,jobs,service,preview,game};
 }
 for(const game of ['zzz','endfield']as const){
+ test(game+': missing root component is an installation state and manual directory creation is detected independently of INI availability',async()=>{
+  const f=await fixture(game),component=path.join(f.root,f.importer),inactive=path.join(f.root,'not-the-selected-component');await fs.rename(component,inactive);
+  const config=JSON.parse(await fs.readFile(f.config,'utf8'));config.Importers[f.importer].Importer.game_folder=f.next;await fs.writeFile(f.config,JSON.stringify(config));
+  const settings=await f.store.read();settings.games[game].gameDirectory=f.next;await f.store.save(settings);
+  const beforeConfig=await fs.readFile(f.config),beforeSettings=await fs.readFile(f.store.file);
+  const missing=await f.service.check(game,'quick');assert.equal(missing.state,'needs-component');assert.equal(missing.loader.importerExists,false);assert.equal(missing.capabilities.launch,false);assert.equal(missing.loader.importerDirectory,component);assert.ok(missing.issues.some(i=>i.includes('手动点击安装')));assert.ok(!missing.issues.some(i=>i.includes('未完全匹配')));
+  const candidate=missing.candidates.find(c=>c.kind==='game')!;assert.ok(candidate);
+  await fs.mkdir(component);await assert.rejects(f.service.prepare(game,{kind:'repair',resultId:missing.resultId,candidateId:candidate.id,scope:'save'}),/变化/);
+  const present=await f.service.check(game,'quick');assert.equal(present.loader.installed,true);assert.equal(present.capabilities.launch,true);assert.equal(present.capabilities.refresh,false);assert.equal(present.capabilities.sync,false);
+  assert.deepEqual(await fs.readFile(f.config),beforeConfig);assert.deepEqual(await fs.readFile(f.store.file),beforeSettings);await assert.rejects(fs.stat(path.join(component,'d3dx.ini')),{code:'ENOENT'});
+ });
+ test(game+': saved inner XXMI folders and outer or EXE game locations pass read-only quick inspection',async()=>{
+  const f=await fixture(game),directory=path.join(f.old,'Game');await write(path.join(directory,f.exe),'game fixture');const config=JSON.parse(await fs.readFile(f.config,'utf8'));config.Importers[f.importer].Importer.game_folder=directory;await fs.writeFile(f.config,JSON.stringify(config));
+  for(const gameDirectory of [f.old,path.join(directory,f.exe)]){
+   const settings=await f.store.read();settings.games[game]={...settings.games[game],xxmiRoot:path.join(f.root,'Resources','Bin'),gameDirectory};await f.store.save(settings);
+   const before=await fs.readFile(f.store.file);const report=await f.service.check(game,'quick');assert.equal(report.loader.installed,true);assert.equal(report.capabilities.launch,true,report.issues.join('; '));assert.equal(report.executable,path.join(directory,f.exe));assert.deepEqual(await fs.readFile(f.store.file),before);
+  }
+ });
  test(game+': read-only bounded discovery, public preview, byte-preserving sync and selective rollback',async()=>{
   const f=await fixture(game,'utf16le'),beforeConfig=await fs.readFile(f.config),beforeIni=await fs.readFile(f.ini),beforeSettings=await fs.readFile(f.store.file);
   const quick=await f.service.check(game,'quick');assert.equal(quick.complete,false);assert.equal(quick.capabilities.manageMods,true);assert.equal(quick.capabilities.launch,false);

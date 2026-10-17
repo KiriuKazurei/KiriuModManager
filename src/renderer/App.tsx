@@ -1,3 +1,4 @@
+import {FeedbackNotice} from './Notices';
 import {CompatibilityPanel} from './CompatibilityPanel';
 import {DiagnosticsPanel} from './DiagnosticsPanel';
 import {reportRendererEvent} from './logging';
@@ -5,7 +6,8 @@ import {RecoveryPage} from './RecoveryPage';
 import {ConflictPage} from './ConflictPage';
 import type {IniNavigationTarget} from '../shared/inspections';
 import { useEffect, useState, useRef } from 'react';
-import { GameId, GAMES, Settings } from '../shared/contracts';
+import { GameId, GAMES, Settings, type DesktopLaunchResult } from '../shared/contracts';
+import {type NoticeTone} from './notice-store';
 import { SettingsPage } from './SettingsPage';
 import { ModPage } from './ModPage';
 import {CharacterGallery,CharacterScope} from './CharacterGallery';
@@ -30,17 +32,18 @@ export function App() {
   const [iniId,setIniId]=useState('');const [settingsRevision,setSettingsRevision]=useState(0);
   const [busy,setBusy]=useState(false); const [error,setError]=useState('');
   const [desktopMessage,setDesktopMessage]=useState('');
+  const [desktopTone,setDesktopTone]=useState<NoticeTone>('success');
   async function load(){setError('');try{const data=unwrap(await window.kmm.readSettings());acceptSettings(data);setPage(data.games[data.selectedGame].modsDirectory?'mods':'preferences');}catch(e){setError((e as Error).message);}}
   useEffect(()=>{void load();},[]);
   useEffect(()=>{reportRendererEvent({kind:'navigation',page:page+(page==='preferences'?':'+settingsTab:''),gameId:settings?.selectedGame});},[page,settingsTab,settings?.selectedGame]);
   useEffect(()=>window.kmm.onDesktopChange(event=>{if(!event.settingsChanged)return;void window.kmm.readSettings().then(result=>{try{acceptSettings(unwrap(result));}catch(e){setError((e as Error).message);}});}),[]);
-  async function desktopAction(work:()=>Promise<string|void>){setBusy(true);setError('');setDesktopMessage('');try{setDesktopMessage(await work()||'桌面操作已完成。');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  async function desktopAction(work:()=>Promise<string|DesktopLaunchResult|void>){setBusy(true);setError('');setDesktopMessage('');try{const result=await work();setDesktopTone(typeof result==='object'&&result.status==='unconfirmed'?'warning':'success');setDesktopMessage(typeof result==='object'?result.message:result||'桌面操作已完成。');}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
   async function selectGame(game:GameId) {
     setBusy(true);setError('');
     try { const saved=unwrap(await window.kmm.selectGame(game));acceptSettings(saved);return true; }
     catch(e){setError((e as Error).message);return false;} finally {setBusy(false);}
   }
-  if(!settings) return <main className="loading"><h1>Kiriu Mod Manager</h1><p role={error?'alert':'status'}>{error||'正在读取本地工作区…'}</p>{error&&<button onClick={()=>void load()}>重试读取</button>}</main>;
+  if(!settings) return <main className="loading"><h1>Kiriu Mod Manager</h1><FeedbackNotice error={error}/><p role="status">{error?'本地工作区读取未完成，请重试。':'正在读取本地工作区…'}</p>{error&&<button onClick={()=>void load()}>重试读取</button>}</main>;
   const game=settings.selectedGame;
   const navButton=(key:typeof page,label:string,icon:Parameters<typeof Icon>[0]['kind'],onClick=()=>setPage(key))=><button key={key} className={page===key?'active':''} aria-current={page===key?'page':undefined} title={sidebar.collapsed?label:undefined} aria-label={sidebar.collapsed?label:undefined} disabled={busy} onClick={onClick}><Icon kind={icon}/><span className="nav-text">{label}</span></button>;
   return <div className={`app-shell ${sidebar.collapsed?'sidebar-collapsed':''}`} style={sidebar.shellStyle}>
@@ -51,7 +54,7 @@ export function App() {
       <nav className="sidebar-footer" aria-label="预设与设置">{navButton('presets','预设','grid')}{navButton('preferences','设置','settings')}</nav>
       {!sidebar.collapsed&&<div className="sidebar-resizer" {...sidebar.resizerProps}/>}
     </aside>
-    <div className="workspace"><header className="workspace-bar"><span>{GAMES[game].name}<small>{GAMES[game].subtitle}</small></span><div className="desktop-actions"><ThemeControl/><button disabled={busy} onClick={()=>void desktopAction(()=>window.kmm.launchXXMI(game,'gui').then(unwrap))}>打开 XXMI</button><button disabled={busy} onClick={()=>void desktopAction(()=>window.kmm.launchXXMI(game,'game').then(unwrap))}>启动游戏</button></div></header>{error&&<p className="error shell-error" role="alert">{error}</p>}{desktopMessage&&<p className="success shell-error" role="status">{desktopMessage}</p>}
+    <div className="workspace"><header className="workspace-bar"><span>{GAMES[game].name}<small>{GAMES[game].subtitle}</small></span><div className="desktop-actions"><ThemeControl/><button disabled={busy} onClick={()=>void desktopAction(()=>window.kmm.launchXXMI(game,'gui').then(unwrap))}>打开 XXMI</button><button disabled={busy} onClick={()=>void desktopAction(()=>window.kmm.launchXXMI(game,'game').then(unwrap))}>启动游戏</button></div></header><FeedbackNotice error={error}/><FeedbackNotice message={desktopMessage} tone={desktopTone} title={desktopTone==='warning'?'启动状态待确认':undefined}/>
       {(page==='mods'||(page==='market'||page==='downloads')&&scope)&&<div hidden={page!=='mods'}>{scope?<ModPage key={game} active={page==='mods'} initialModId={initialModId} gameId={game} scope={scope} onBack={()=>{setInitialModId('');setScope(null);}} savedRoot={settings.games[game].modsDirectory} onBusy={setBusy} onSettings={()=>setPage('preferences')} onIni={id=>{setIniTarget(null);setIniId(id);}}/>:<CharacterGallery key={game} gameId={game} savedRoot={settings.games[game].modsDirectory} onBusy={setBusy} onSettings={()=>setPage('preferences')} onOpen={setScope}/>}</div>}
       {page==='market'&&<ModBrowserPage gameId={game} onDownloads={()=>setPage('downloads')}/>}
       {page==='downloads'&&<ModDownloadsPage modsRoots={{zzz:settings.games.zzz.modsDirectory,endfield:settings.games.endfield.modsDirectory}} onBrowse={()=>{setIniId('');setPage('market');}} onLibrary={(taskGame,id)=>{void (async()=>{if(game!==taskGame&&!await selectGame(taskGame))return;setInitialModId(id);setScope({kind:'all'});setPage('mods');})();}}/>}

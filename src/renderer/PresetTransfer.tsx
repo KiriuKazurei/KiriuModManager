@@ -1,3 +1,4 @@
+import {FeedbackNotice} from './Notices';
 import {useEffect,useRef,useState} from 'react';
 import type {GameId,Preset} from '../shared/contracts';
 import type {ManifestChoice,PresetImportReceipt} from '../shared/preset-workflows';
@@ -16,7 +17,7 @@ export function PresetExportPanel({gameId,preset,busy}:{gameId:GameId;preset:Pre
   {plan&&<div className="preset-export-preview"><p>{plan.manifest.members.length} 个 Mod · {plan.iniFiles} 个独立 INI · {plan.iniBytes} 字节配置副本</p>
    <VirtualList items={plan.manifest.members} rowHeight={126} className="manifest-export-members" itemKey={member=>member.key} render={member=><article className="manifest-member"><strong>{member.name} · {member.enabled?'启用':'停用'}</strong><small>Mod ID：{member.source?member.source.modId:member.id}{member.source?' / 文件 '+member.source.fileId:' · 本地 Mod'}</small>{member.source&&<input aria-label={'导出下载链接 '+member.name} value={member.source.downloadUrl} readOnly/>}<code title={member.hash.sha256}>SHA256：{member.hash.sha256}</code></article>}/>
    <div className="tool-actions"><button disabled={busy||saving||inspection.job?.stale} onClick={()=>void save()}>选择位置并导出</button><button disabled={saving} onClick={inspection.clear}>取消导出预览</button></div>
-  </div>}{error&&<p className="error" role="alert">{error}</p>}{message&&<p className="success" role="status">{message}</p>}
+  </div>}<FeedbackNotice error={error}/><FeedbackNotice message={message}/>
  </section>;
 }
 
@@ -43,6 +44,6 @@ export function PresetImportPanel({gameId,preset,busy,onBusy,onImported}:{gameId
    {!!plan.missing.length&&<label><input type="checkbox" checked={allowMissing} disabled={busy||reading} onChange={e=>setAllowMissing(e.target.checked)}/>保留缺少的 Mod 名称，保存待补齐清单</label>}
    {plan.hasProfile&&<><label><input type="checkbox" checked={includeProfile} disabled={busy||!plan.canImportProfile} onChange={e=>setIncludeProfile(e.target.checked)}/>导入兼容的独立 INI 副本（保存后不应用）</label>{!plan.canImportProfile&&<p className="mismatch">独立 INI 尚未满足全部成员与资源兼容条件，可保存启停清单。</p>}</>}
    <div className="tool-actions"><button className="primary" disabled={busy||reading||edited||inspection.job?.stale||!name.trim()||!!plan.missing.length&&!allowMissing} onClick={()=>void commit()}>{plan.matches.some(match=>match.accepted)?'保存导入预设':'保存待匹配清单'}</button><button disabled={busy} onClick={()=>{inspection.clear();setPicking('');setMessage('已取消清单导入。');}}>取消清单导入</button></div>
-  </div>}{error&&<p className="error" role="alert">{error}</p>}{message&&<p className="success" role="status">{message}</p>}
+  </div>}<FeedbackNotice error={error}/><FeedbackNotice message={message}/>
  </section>;
 }

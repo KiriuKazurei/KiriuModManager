@@ -20,6 +20,11 @@ export async function validateGamePathInput(game:GameId,field:keyof GamePaths,in
     try {await assertNoLinks(original);if(!(await fs.stat(original)).isFile())throw new Error();}
     catch {throw new Error(`${label}：EXE 不存在、不可读或含链接，请重新选择安装位置。`);}
   }
+  if(!executable&&normalized!==original){
+    await assertNoLinks(original);
+    try{if(!(await fs.stat(original)).isDirectory())throw new Error();}
+    catch{throw new Error(`${label}：所选内层目录不存在或不是目录，请重新选择安装位置。`);}
+  }
   const directory=path.resolve(normalized);
   try {
     await assertNoLinks(directory);
@@ -38,6 +43,6 @@ export async function validateGamePathInput(game:GameId,field:keyof GamePaths,in
     if(code==='ENOENT'||code==='ENOTDIR')throw new Error(`${label}：目录不存在或上级路径是文件，请重新选择目录。`);
     throw error;
   }
-  if(field==='gameDirectory')await requireGameExecutable(game,directory);
+  if(field==='gameDirectory')return (await requireGameExecutable(game,directory)).directory;
   return directory;
 }

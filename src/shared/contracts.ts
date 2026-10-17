@@ -22,10 +22,11 @@ export interface GamePaths { xxmiRoot: string; gameDirectory: string; modsDirect
 export interface DesktopPreferences { marketUrl:string; updateUrl:string; closeToTray:boolean; updateSourceUrl?:string }
 export interface Settings { version: 1; selectedGame: GameId; games: Record<GameId, GamePaths>; desktop?:DesktopPreferences }
 export interface DesktopStatus { trayAvailable:boolean; floatingVisible:boolean; version:string }
+export interface DesktopLaunchResult {status:'submitted'|'unconfirmed';message:string}
 export interface DesktopChange { gameId:GameId; settingsChanged:boolean }
 export interface Inspection {
   gameId: GameId; importer: string; xxmiRoot: string; launcherPath: string; launcherExists: boolean;
-  importerDirectory: string; importerExists: boolean; iniPath: string; gameDirectory: string;
+  importerDirectory: string; importerExists: boolean; iniPath: string; iniExists: boolean; gameDirectory: string;
   modsDirectories: string[]; modsExist: boolean[]; installed: boolean; warnings: string[];
 }
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string; code?:string; details?:DependencyPlan };
@@ -173,7 +174,7 @@ export interface DesktopAPI {
   showMain():Promise<Result<void>>;
   quit():Promise<Result<void>>;
   selectGame(game:GameId):Promise<Result<Settings>>;
-  launchXXMI(game:GameId,mode:'gui'|'game'):Promise<Result<string>>;
+  launchXXMI(game:GameId,mode:'gui'|'game'):Promise<Result<DesktopLaunchResult>>;
   refreshGame(game:GameId):Promise<Result<string>>;
   openLink(game:GameId,kind:'market'|'update'):Promise<Result<string>>;
   onDesktopChange(callback:(event:DesktopChange)=>void):()=>void;

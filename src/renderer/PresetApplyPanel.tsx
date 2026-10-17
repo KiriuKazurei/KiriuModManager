@@ -1,3 +1,4 @@
+import {FeedbackNotice} from './Notices';
 import {useState} from 'react';
 import type {GameId,Preset,LibrarySnapshot,ExclusiveChoices} from '../shared/contracts';
 import {useInspectionJob,InspectionProgress} from './InspectionJob';
@@ -22,6 +23,6 @@ export function PresetApplyPanel({gameId,preset,library,busy,dirty,onSave,onAppl
    {plan.dependency.issues.map((issue,index)=><p key={index} className={issue.severity==='block'?'error':'mismatch'}>{issue.message}</p>)}
    {!!plan.dependency.issues.length&&<label><input type="checkbox" checked={accept} disabled={busy||reading} onChange={e=>setAccept(e.target.checked)}/>接受本次版本提示及预设外联动停用</label>}
    <div className="tool-actions"><button className="primary" disabled={busy||reading||edited||!plan.canApply||inspection.job?.stale||!!plan.dependency.issues.length&&!accept} onClick={()=>void apply()}>确认应用预设</button><button disabled={busy} onClick={()=>{inspection.clear();setMessage('已取消预览，文件未变更。');}}>取消应用预览</button></div>
-  </div>}{error&&<p role="alert" className="error">{error}</p>}{message&&<p role="status" className="success">{message}</p>}
+  </div>}<FeedbackNotice error={error}/><FeedbackNotice message={message}/>
  </section>;
 }

@@ -6,6 +6,9 @@ import {SettingsStore,defaultSettings} from '../src/main/settings';
 import {launchPlan} from '../src/main/desktop';
 import {gamePathsPatch,acceptSubmittedGamePaths} from '../src/renderer/settings-draft';
 import type {GameId} from '../src/shared/contracts';
+import {inspectXXMI} from '../src/main/xxmi';
+import {normalizeGamePathInput} from '../src/shared/path-input';
+import {validatePaths} from '../src/main/sync';
 
 async function fixture(){
   const parent=path.resolve('.run-data/path-settings-tests');
@@ -60,6 +63,56 @@ test('quoted pasted executables and queued game patches retain other settings',a
   const saved=await store.read();
   for(const game of ['zzz','endfield'] as const){assert.equal(saved.games[game].xxmiRoot,installations[game].xxmi);assert.equal(saved.games[game].gameDirectory,installations[game].game);}
   assert.deepEqual(saved.desktop,settings.desktop);assert.equal(saved.selectedGame,'endfield');
+});
+
+test('outer, Resources, Bin and EXE locations resolve to one XXMI installation for both games',async()=>{
+ const {store,installations}=await fixture();
+ for(const game of ['zzz','endfield']as const){
+  const f=installations[game];
+  for(const xxmiRoot of [f.xxmi,path.join(f.xxmi,'Resources'),path.dirname(f.launcher),path.dirname(f.launcher)+path.sep,' "'+f.launcher+'" ']){
+   const inspection=await inspectXXMI(game,xxmiRoot);assert.equal(inspection.installed,true);assert.equal(inspection.xxmiRoot,f.xxmi);assert.equal(inspection.launcherPath,f.launcher);
+   const saved=await store.saveGamePaths(game,{xxmiRoot,gameDirectory:f.game});assert.equal(saved.games[game].xxmiRoot,f.xxmi);
+  }
+ }
+ assert.equal(normalizeGamePathInput('zzz','xxmiRoot','K:\\Resources\\Bin\\'),'K:\\');
+ assert.equal(normalizeGamePathInput('zzz','xxmiRoot','K:/XXMI/resources/'),'K:/XXMI');
+});
+
+test('game outer folders, EXE directories and files save one canonical location and legacy aliases launch without rewriting',async()=>{
+ const {store,installations}=await fixture();
+ for(const game of ['zzz','endfield']as const){
+  const f=installations[game];
+  for(const gameDirectory of [path.dirname(f.game),f.game,f.executable,' "'+f.executable+'" ']){
+   const saved=await store.saveGamePaths(game,{xxmiRoot:path.dirname(f.launcher),gameDirectory});assert.equal(saved.games[game].gameDirectory,f.game);
+   const fields={...saved.games[game],xxmiRoot:path.dirname(f.launcher),gameDirectory};const before=await fs.readFile(store.file);
+   assert.equal((await launchPlan(game,fields,'gui')).executable,f.launcher);
+   assert.equal((await launchPlan(game,fields,'game')).executable,f.launcher);
+   assert.deepEqual(await fs.readFile(store.file),before);
+  }
+ }
+});
+
+test('ambiguous outer game folders and linked inner XXMI directories cannot replace saved settings',async()=>{
+ const {root,store,installations}=await fixture(),f=installations.zzz;
+ const second=path.join(path.dirname(f.game),'Another','ZenlessZoneZero.exe');await fs.mkdir(path.dirname(second),{recursive:true});await fs.writeFile(second,'other install');
+ const before=await fs.readFile(store.file);await assert.rejects(store.saveGamePaths('zzz',{gameDirectory:path.dirname(f.game)}),/唯一/);assert.deepEqual(await fs.readFile(store.file),before);
+ const alias=path.join(root,'Alias','Resources','Bin');await fs.mkdir(path.dirname(alias),{recursive:true});await fs.symlink(path.dirname(f.launcher),alias,process.platform==='win32'?'junction':'dir');
+ await assert.rejects(store.saveGamePaths('zzz',{xxmiRoot:alias}));await assert.rejects(inspectXXMI('zzz',alias));assert.deepEqual(await fs.readFile(store.file),before);
+});
+
+test('outer game selection ignores nested backups inside the same already recognized installation',async()=>{
+ const {store,installations}=await fixture(),f=installations.zzz;
+ const backup=path.join(f.game,'Backup','ZenlessZoneZero.exe');await fs.mkdir(path.dirname(backup),{recursive:true});await fs.writeFile(backup,'old executable');
+ const saved=await store.saveGamePaths('zzz',{gameDirectory:path.dirname(f.game)});assert.equal(saved.games.zzz.gameDirectory,f.game);
+ assert.equal((await launchPlan('zzz',{...saved.games.zzz,xxmiRoot:f.xxmi},'game')).executable,f.launcher);
+});
+
+test('sync and deployment resolve directory aliases before choosing their write locations',async()=>{
+ const {installations}=await fixture();
+ for(const game of ['zzz','endfield']as const){const f=installations[game];
+  const fields=await validatePaths(game,{xxmiRoot:path.dirname(f.launcher),gameDirectory:path.dirname(f.game),modsDirectory:f.mods});
+  assert.deepEqual(fields,{xxmiRoot:f.xxmi,gameDirectory:f.game,modsDirectory:f.mods});
+ }
 });
 
 test('file inputs, wrong-game executables and missing game locations reject without overwriting saved bytes',async()=>{

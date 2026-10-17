@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { defaultSettings, SettingsStore, validateSettings } from '../src/main/settings';
 import { inspectXXMI, parseRecursiveIncludes } from '../src/main/xxmi';
+import {launchPlan} from '../src/main/desktop';
 
 async function fixture() {
   const testRoot = path.resolve('.run-data', 'tests');
@@ -77,4 +78,18 @@ test('absolute and relative recursive includes, multiple paths and game isolatio
     const missing = await inspectXXMI('zzz', path.join(f.base, 'absent'));
     assert.equal(missing.installed, false);
   } finally { await fs.rm(f.base, { recursive: true }); }
+});
+
+for(const gameId of ['zzz','endfield']as const)test(gameId+': launcher-only installation opens the GUI for manual component installation, then detects the actual root directory',async()=>{
+ const f=await fixture(),importer=gameId==='zzz'?'ZZMI':'EFMI',other=gameId==='zzz'?'EFMI':'ZZMI';
+ if(gameId==='zzz')await fs.rename(path.join(f.root,'ZZMI'),path.join(f.root,'EFMI'));
+ const configFile=path.join(f.root,'XXMI Launcher Config.json');await fs.writeFile(configFile,JSON.stringify({Launcher:{enabled_importers:[importer]},Importers:{[importer]:{Importer:{importer_folder:other,game_folder:f.game}}}}));
+ const configBefore=await fs.readFile(configFile),fields={xxmiRoot:f.root,gameDirectory:'',modsDirectory:f.externalMods};
+ const missing=await inspectXXMI(gameId,f.root);assert.equal(missing.launcherExists,true);assert.equal(missing.installed,false);assert.equal(missing.importerDirectory,path.join(f.root,importer));assert.equal(missing.importerExists,false);assert.ok(missing.warnings.some(w=>w.includes('手动点击安装')));
+ for(const mode of ['gui','game']as const){const plan=await launchPlan(gameId,fields,mode);assert.deepEqual(plan.args,['--xxmi',importer]);assert.equal(plan.installImporter,importer);assert.equal(plan.executable,path.join(f.root,'Resources','Bin','XXMI Launcher.exe'));}
+ await assert.rejects(fs.stat(path.join(f.root,importer)),{code:'ENOENT'});assert.deepEqual(await fs.readFile(configFile),configBefore);
+ await fs.mkdir(path.join(f.root,importer));const present=await inspectXXMI(gameId,f.root);assert.equal(present.installed,true);assert.equal(present.importerExists,true);assert.equal(present.iniExists,false);assert.deepEqual(present.modsDirectories,[]);
+ const exe=gameId==='zzz'?'ZenlessZoneZero.exe':'Endfield.exe';await fs.writeFile(path.join(f.game,exe),'fixture, never execute');
+ const plan=await launchPlan(gameId,{...fields,gameDirectory:f.game},'game');assert.deepEqual(plan.args,['--nogui','--xxmi',importer]);assert.equal(plan.installImporter,undefined);
+ assert.deepEqual(await fs.readFile(configFile),configBefore);
 });

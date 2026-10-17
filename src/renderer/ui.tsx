@@ -1,8 +1,9 @@
 import { Result,DependencyConfirmation } from '../shared/contracts';
+import {FeedbackNotice,confirmNotice} from './Notices';
 export function unwrap<T>(result:Result<T>):T {if(!result.ok) throw new Error(result.error); return result.value;}
-export async function guarded<T>(work:(confirmation?:DependencyConfirmation)=>Promise<Result<T>>):Promise<T>{const result=await work();if(result.ok)return result.value;if(result.code==='DEPENDENCY_CONFIRMATION'&&result.details){if(result.details.issues.some(i=>i.severity==='block'))throw new Error(result.error);if(!window.confirm(result.error+'\n\n接受本次操作的提示并继续？'))throw new Error('已取消操作。');return unwrap(await work({token:result.details.token,acceptWarnings:true}));}return unwrap(result);}
+export async function guarded<T>(work:(confirmation?:DependencyConfirmation)=>Promise<Result<T>>):Promise<T>{const result=await work();if(result.ok)return result.value;if(result.code==='DEPENDENCY_CONFIRMATION'&&result.details){if(result.details.issues.some(i=>i.severity==='block'))throw new Error(result.error);if(!await confirmNotice(result.error+'\n\n接受本次操作的提示并继续？'))throw new Error('已取消操作。');return unwrap(await work({token:result.details.token,acceptWarnings:true}));}return unwrap(result);}
 export function OperationFeedback({error,message,quiet}:{error:string;message:string;quiet:string}){
-  return <div className="feedback" aria-live="polite">{message?<p className="success">{message}</p>:null}{error?<p className="error" role="alert">{error}</p>:null}{!message&&!error?<p className="quiet">{quiet}</p>:null}</div>;
+  return <div className="feedback"><FeedbackNotice error={error} message={message}/>{quiet&&<p className="quiet">{quiet}</p>}</div>;
 }
 export function Icon({kind}:{kind:'settings'|'game'|'folder'|'grid'|'search'|'plus'|'panel'|'download'|'back'|'forward'|'refresh'|'home'}) {
   const navigation={download:<><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></>,back:<path d="m14 6-6 6 6 6"/>,forward:<path d="m10 6 6 6-6 6"/>,refresh:<><path d="M20 7v5h-5"/><path d="M20 12a8 8 0 1 0-2.3 5.7M20 7l-3-3"/></>,home:<><path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-8h6v8"/></>};

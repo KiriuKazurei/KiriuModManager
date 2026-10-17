@@ -1,9 +1,10 @@
+import {FeedbackNotice} from './Notices';
 import {useEffect,useRef,useState} from 'react';
 import type {GameId,Settings} from '../shared/contracts';
 import type {EnvironmentRepairPreview,EnvironmentRepairRequest,EnvironmentScope} from '../shared/environment';
 import {InspectionProgress,useInspectionJob} from './InspectionJob';
 import {unwrap} from './ui';
-const states={healthy:'路径检查通过','change-detected':'发现路径差异','needs-selection':'请选择候选',transient:'有修复等待处理',unavailable:'未确认游戏位置',unknown:'需要进一步检查'};
+const states={healthy:'路径检查通过','change-detected':'发现路径差异','needs-selection':'请选择候选','needs-component':'待安装游戏组件',transient:'有修复等待处理',unavailable:'未确认游戏位置',unknown:'需要进一步检查'};
 const scopes={save:'仅保存验证路径','sync-game':'保存并同步 Launcher 游戏路径','sync-mods':'同时修复静态 Mod 读取规则'};
 export function EnvironmentPanel({gameId,hidden,onBusy,onSaved}:{gameId:GameId;hidden:boolean;onBusy:(busy:boolean)=>void;onSaved:(settings:Settings)=>void}){
  const reader=useInspectionJob(gameId),[candidate,setCandidate]=useState(''),[scope,setScope]=useState<EnvironmentScope>('save'),[preview,setPreview]=useState<EnvironmentRepairPreview|null>(null),[busy,setBusy]=useState(false),[message,setMessage]=useState('');
@@ -23,8 +24,8 @@ export function EnvironmentPanel({gameId,hidden,onBusy,onSaved}:{gameId:GameId;h
   <h3>已保存路径状态</h3><p>游戏更新后的 Mod 兼容性仍需实际测试。</p>
   <div className="environment-actions"><button disabled={busy||reader.job?.stage==='running'} onClick={()=>void check('quick')}>轻检查</button><button disabled={busy||reader.job?.stage==='running'} onClick={()=>void check('discover')}>查找候选</button><button disabled={busy||reader.job?.stage==='running'} onClick={()=>void choose('game')}>重新定位游戏</button><button disabled={busy||reader.job?.stage==='running'} onClick={()=>void choose('loader')}>重新定位 XXMI</button></div>
   <InspectionProgress job={reader.job} error={reader.error} onCancel={()=>void reader.cancel()}/>
-  {message&&<p role="status">{message}</p>}
-  {report&&<><h3>{states[report.state]}</h3><dl><dt>已保存游戏目录</dt><dd>{report.paths.gameDirectory||'未配置'}</dd><dt>实际 EXE</dt><dd>{report.executable||'尚未确认'}</dd><dt>Launcher 目标</dt><dd>{report.loader.gameDirectory||'未配置'}</dd><dt>loader 读取目录</dt><dd>{report.loader.modsDirectories.join('；')||'尚未确认'}</dd><dt>Mod 库</dt><dd>{report.paths.modsDirectory||'未配置'} · {report.capabilities.manageMods?'可独立管理':'目录尚未确认'}</dd></dl><ul>{report.issues.map(issue=><li key={issue}>{issue}</li>)}</ul>
+  <FeedbackNotice message={message}/>
+  {report&&<><h3>{states[report.state]}</h3><dl><dt>{report.loader.importer} 组件</dt><dd>{report.loader.importerExists?'目录存在':'未安装'}<br/>{report.loader.importerDirectory}</dd><dt>已保存游戏目录</dt><dd>{report.paths.gameDirectory||'未配置'}</dd><dt>实际 EXE</dt><dd>{report.executable||'尚未确认'}</dd><dt>Launcher 目标</dt><dd>{report.loader.gameDirectory||'未配置'}</dd><dt>loader 读取目录</dt><dd>{report.loader.modsDirectories.join('；')||'尚未确认'}</dd><dt>Mod 库</dt><dd>{report.paths.modsDirectory||'未配置'} · {report.capabilities.manageMods?'可独立管理':'目录尚未确认'}</dd></dl><ul>{report.issues.map(issue=><li key={issue}>{issue}</li>)}</ul>
    <label>修复候选<select aria-label="环境修复候选" disabled={busy||invalid} value={candidate} onChange={e=>{setCandidate(e.target.value);setPreview(null);}}><option value="">请选择，不自动采用候选</option>{report.candidates.map(c=><option key={c.id} value={c.id}>{c.name} · {c.source} · {c.paths.gameDirectory||c.paths.xxmiRoot}</option>)}</select></label>
    {candidate&&<p className="environment-candidate">游戏：{report.candidates.find(c=>c.id===candidate)?.paths.gameDirectory||'未配置'}<br/>XXMI：{report.candidates.find(c=>c.id===candidate)?.paths.xxmiRoot||'未配置'}</p>}
    <label>修复范围<select aria-label="环境修复范围" value={scope} disabled={busy} onChange={e=>{setScope(e.target.value as EnvironmentScope);setPreview(null);}}>{Object.entries(scopes).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><button disabled={busy||invalid||!candidate} onClick={()=>void prepare({kind:'repair',resultId:report.resultId,candidateId:candidate,scope})}>预览路径修复</button>

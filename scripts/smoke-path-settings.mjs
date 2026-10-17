@@ -39,10 +39,9 @@ async function launch(){
   await page.getByRole('heading',{name:'路径设置',exact:true}).waitFor();
 }
 async function screenshot(name){
-  const cdp=await page.context().newCDPSession(page);
-  try {const shot=await cdp.send('Page.captureScreenshot',{format:'png',fromSurface:false,captureBeyondViewport:false});await fs.writeFile(path.join(run,name+'.png'),Buffer.from(shot.data,'base64'));}
-  finally {await cdp.detach();}
+  await page.screenshot({path:path.join(run,name+'.png'),timeout:15000});
 }
+async function acknowledgeNotice(){const dialog=page.locator('.notice-dialog[open]');await dialog.waitFor();await dialog.getByRole('button',{name:'确定',exact:true}).click();await dialog.waitFor({state:'hidden'});}
 async function chooseGame(game){
   await page.getByLabel('当前游戏',{exact:true}).selectOption(game);
   await page.waitForFunction(game=>document.querySelector('.current-game-select').value===game&&!document.querySelector('.current-game-select').disabled,game);
@@ -57,20 +56,43 @@ try {
     await chooseGame(game);const f=fixtures[game];
     assert.equal(await page.getByRole('button',{name:'保存配置',exact:true}).isEnabled(),true);
     await page.getByRole('button',{name:'检测已有安装',exact:true}).click();
-    await page.getByText('检测到组件',{exact:true}).waitFor();
+    await page.getByText('检测到组件',{exact:true}).waitFor();await acknowledgeNotice();
     await page.getByRole('button',{name:'保存配置',exact:true}).click();
-    await page.getByText('配置已保存，已将输入路径规范为目录。',{exact:true}).waitFor();
+    await page.getByText('配置已保存，已将输入路径规范为目录。',{exact:true}).waitFor();await acknowledgeNotice();
     assert.equal(await page.locator('#xxmiRoot').inputValue(),f.root);
     assert.equal(await page.locator('#gameDirectory').inputValue(),f.gameDirectory);
     const disk=JSON.parse(await fs.readFile(savedFile,'utf8'));
     assert.deepEqual(disk.games[game],{xxmiRoot:f.root,gameDirectory:f.gameDirectory,modsDirectory:f.modsDirectory});
     checks.push(game+': legacy EXE paths detected, explicit save normalizes and persists directories');
+    for(const [xxmiRoot,gameDirectory]of [[path.dirname(f.launcher),path.dirname(f.gameDirectory)],[path.join(f.root,'Resources'),f.executable],[f.root,path.dirname(f.gameDirectory)],[f.launcher,f.gameDirectory]]){
+      await page.locator('#xxmiRoot').fill(xxmiRoot);await page.locator('#gameDirectory').fill(gameDirectory);
+      await page.getByRole('button',{name:'保存配置',exact:true}).click();await page.getByText('配置已保存，已将输入路径规范为目录。',{exact:true}).waitFor();await acknowledgeNotice();
+      assert.equal(await page.locator('#xxmiRoot').inputValue(),f.root);assert.equal(await page.locator('#gameDirectory').inputValue(),f.gameDirectory);
+      assert.deepEqual(JSON.parse(await fs.readFile(savedFile,'utf8')).games[game],{xxmiRoot:f.root,gameDirectory:f.gameDirectory,modsDirectory:f.modsDirectory});
+    }
+    checks.push(game+': outer, Resources, Bin and EXE inputs save the same actual launcher and game directories through production IPC');
   }
+  // The production IPC handler runs; launching fixture EXEs is replaced with a captured plan.
+  await app.evaluate(({app})=>{const path=process.getBuiltinModule('path'),load=process.getBuiltinModule('module').createRequire(path.join(app.getAppPath(),'package.json'));const desktop=load(path.join(app.getAppPath(),'dist/main/desktop.js'));globalThis.__componentPlans=[];globalThis.__originalLauncher=desktop.spawnLauncher;desktop.spawnLauncher=async plan=>{globalThis.__componentPlans.push(plan);return {status:'submitted'};};});
+  for(const game of ['zzz','endfield']){
+    await chooseGame(game);const f=fixtures[game],importer=game==='zzz'?'ZZMI':'EFMI',component=path.join(f.root,importer),manualFiles=path.join(run,game,'manual-install-files');
+    await fs.rename(component,manualFiles);
+    await page.getByRole('button',{name:'检测已有安装',exact:true}).click();await page.getByText('待安装组件',{exact:true}).waitFor();await acknowledgeNotice();
+    await page.locator('.path-repair>summary').click();const repair=page.getByRole('region',{name:'路径检查与修复',exact:true});await repair.getByRole('heading',{name:'待安装游戏组件',exact:true}).waitFor();
+    for(const button of ['打开 XXMI','启动游戏']){await page.getByRole('button',{name:button,exact:true}).click();await page.locator('.notice-dialog[open]').filter({hasText:'已提交 XXMI 打开请求：根目录下缺少 '+importer}).waitFor();await acknowledgeNotice();}
+    const plans=await app.evaluate(()=>globalThis.__componentPlans.slice(-2));assert.equal(plans.length,2);for(const plan of plans){assert.deepEqual(plan.args,['--xxmi',importer]);assert.equal(plan.installImporter,importer);}
+    await assert.rejects(fs.stat(component),{code:'ENOENT'});
+    await screenshot(game+'-manual-component-install');
+    await fs.rename(manualFiles,component);await page.getByRole('button',{name:'检测已有安装',exact:true}).click();await page.getByText('检测到组件',{exact:true}).waitFor();await acknowledgeNotice();await repair.getByRole('button',{name:'轻检查',exact:true}).click();await repair.getByRole('heading',{name:'路径检查通过',exact:true}).waitFor();
+    await page.locator('.path-repair>summary').click();
+    checks.push(game+': missing component is displayed separately; both launch buttons use GUI-only plans through production IPC without installing files; manual installation is detected');
+  }
+  await app.evaluate(({app})=>{const path=process.getBuiltinModule('path'),load=process.getBuiltinModule('module').createRequire(path.join(app.getAppPath(),'package.json'));load(path.join(app.getAppPath(),'dist/main/desktop.js')).spawnLauncher=globalThis.__originalLauncher;});
   await chooseGame('zzz');
   const before=await fs.readFile(savedFile);
   await page.locator('#xxmiRoot').fill(unrelatedFile);
   await page.getByRole('button',{name:'保存配置',exact:true}).click();
-  await page.getByRole('alert').filter({hasText:'当前路径是文件'}).waitFor();
+  await page.locator('.notice-dialog.error').filter({hasText:'当前路径是文件'}).waitFor();await acknowledgeNotice();
   assert.deepEqual(await fs.readFile(savedFile),before);
   assert.equal(await page.locator('#xxmiRoot').inputValue(),unrelatedFile);
   checks.push('file input rejected through production IPC; saved bytes and failed draft retained');

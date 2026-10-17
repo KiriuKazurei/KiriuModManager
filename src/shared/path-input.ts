@@ -9,7 +9,7 @@ export const GAME_EXECUTABLE_NAMES = {
 export function normalizeGamePathInput(game:GameId,field:keyof GamePaths,input:string):string {
   const value=input.trim().replace(/^"(.*)"$/, '$1').trim();
   if(field==='xxmiRoot') {
-    const match=/^(.*)([\\/])Resources[\\/]Bin[\\/]XXMI Launcher\.exe$/i.exec(value);
+    const match=/^(.*)([\\/])Resources(?:[\\/]Bin(?:[\\/]XXMI Launcher\.exe)?)?[\\/]*$/i.exec(value);
     if(match)return match[1] ? match[1]+(/^[a-z]:$/i.test(match[1])?match[2]:'') : match[2];
   }
   if(field==='gameDirectory') {

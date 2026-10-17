@@ -4,6 +4,7 @@ import path from 'node:path';
 import { GameId, GamePaths, GAMES, Inspection } from '../shared/contracts';
 import { inspectXXMI, parseRecursiveIncludes, resolveLoaderPath } from './xxmi';
 import { assertNoLinks } from './archive';
+import {validateGamePathInput} from './path-input';
 type JsonObject = Record<string, any>;
 const dictionary = (value: unknown): JsonObject => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('XXMI 配置结构无效，原文件未修改。');
@@ -42,7 +43,7 @@ export async function validatePaths(gameId: GameId, input: GamePaths): Promise<G
   for (const key of ['xxmiRoot', 'gameDirectory', 'modsDirectory'] as const) {
     const value = input?.[key];
     if (typeof value !== 'string' || !value.trim() || !path.isAbsolute(value.trim()) || /[\r\n\0;"*?]/.test(value)) throw new Error('安装位置、游戏目录和 Mod 目录都需要有效的完整绝对路径。');
-    output[key] = path.resolve(value.trim()); await assertNoLinks(output[key]);
+    output[key] = await validateGamePathInput(gameId,key,value);
   }
   if(output.modsDirectory===path.parse(output.modsDirectory).root)throw new Error('Mod 目录不能直接使用磁盘根目录，请选择专用文件夹。');
   if (!(await fs.stat(output.gameDirectory)).isDirectory()) throw new Error('游戏目录不存在，请先选择游戏安装位置。');
