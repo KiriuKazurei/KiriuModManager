@@ -55,6 +55,12 @@ test('network errors, HTTPS downgrade redirects and oversized manifests are reje
  let requests=0;await assert.rejects(resolveAppUpdate(async()=>{requests++;return new Response(null,{status:302,headers:{location:'http://example.com/update'}});},source),/HTTPS/);assert.equal(requests,1);
  await assert.rejects(resolveAppUpdate(async()=>new Response('x'.repeat(256*1024+1)),source),/过大/);
 });
+test('HTTPS redirects are followed one hop at a time and redirect loops are bounded',async()=>{
+ const info=manifest(new Uint8Array([1]));const seen:string[]=[];
+ const release=await resolveAppUpdate(async url=>{seen.push(url);return url===source?new Response(null,{status:302,headers:{location:'https://cdn.example.test/manifest.json'}}):new Response(JSON.stringify(info));},source);
+ assert.equal(release.version,'0.0.2');assert.deepEqual(seen,[source,'https://cdn.example.test/manifest.json']);
+ let hops=0;await assert.rejects(resolveAppUpdate(async()=>{hops++;return new Response(null,{status:307,headers:{location:source}});},source),/重定向过多/);assert.equal(hops,6);
+});
 test('download and install confirmations cancel without changing the package; source changes invalidate checked release',async()=>{
  const f=await fixture();assert.equal((await f.updater.check(source)).stage,'available');assert.equal(await f.updater.download(source,async()=>false),null);assert.equal(f.urls.length,1);
  assert.equal((await f.updater.download(source,async()=>true))?.stage,'ready');assert.equal(await f.updater.install(source,async()=>false),null);assert.equal(f.updater.status.stage,'ready');

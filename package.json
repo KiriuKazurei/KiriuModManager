@@ -1,6 +1,6 @@
 {
   "name": "kiriu-mods-manager",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "description": "本地双游戏 Mod 管理器",
   "main": "dist/main/index.js",
@@ -22,6 +22,7 @@
     "smoke:v003": "node scripts/smoke-v003.mjs",
     "smoke:browser-cookies": "node scripts/smoke-browser-cookies.mjs",
     "smoke:app-update": "node scripts/smoke-app-update.mjs",
+    "smoke:update-network": "node scripts/smoke-update-network.mjs",
     "smoke:priority": "node scripts/smoke-priority-iteration.mjs",
     "smoke:mod-browser": "node scripts/smoke-mod-browser.mjs",
     "smoke:mod-browser:live": "node scripts/smoke-mod-browser-live.mjs",

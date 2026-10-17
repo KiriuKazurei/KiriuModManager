@@ -15,8 +15,10 @@ const outcomes=[];const errors=[];let app;let browser;let currentPid;let replace
 const remote='https://updates.example.test/kmm-update.json';let info=JSON.parse(await fs.readFile(newReport.updateManifest,'utf8'));info.url='https://updates.example.test/update.zip';info.notes='更新验证：下载、校验、退出、替换、重启。\n<script>window.__unsafe=true</script>';
 const server=createServer((req,res)=>{
  if(mode==='offline'){res.writeHead(503);res.end('offline fixture');return;}
- if(req.url==='/kmm-update.json'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(info));return;}
- if(req.url==='/update.zip'){res.writeHead(200,{'Content-Type':'application/zip'});if(mode==='corrupt'){res.end('corrupt fixture');return;}createReadStream(servedArchive).pipe(res);return;}
+ if(req.url==='/kmm-update.json'){res.writeHead(302,{Location:'https://updates.example.test/manifest.json'});res.end();return;}
+ if(req.url==='/manifest.json'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(info));return;}
+ if(req.url==='/update.zip'){res.writeHead(302,{Location:'https://updates.example.test/archive.zip'});res.end();return;}
+ if(req.url==='/archive.zip'){res.writeHead(200,{'Content-Type':'application/zip'});if(mode==='corrupt'){res.end('corrupt fixture');return;}createReadStream(servedArchive).pipe(res);return;}
  res.writeHead(404);res.end();
 });await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const port=server.address().port;
 async function write(file,data){await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,data);}
@@ -29,7 +31,7 @@ async function setup(name){
  await write(path.join(data,'settings.json'),JSON.stringify(settings));await write(path.join(data,'user-marker.txt'),'unchanged user data');const settingsBytes=await fs.readFile(path.join(data,'settings.json'));const debugPort=await availablePort();
  const env={...process.env,KMM_DATA_DIR:data,KMM_DEBUG_PORT:String(debugPort)};delete env.ELECTRON_RUN_AS_NODE;delete env.KMM_DEV_URL;delete env.KMM_UPDATE_JOB;
  app=await electron.launch({executablePath:path.join(install,'KiriuModsManager.exe'),args:[],cwd:directory,env});currentPid=app.process().pid;const page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByRole('tab',{name:'关于',exact:true}).click();await page.getByRole('heading',{name:'管理器更新',exact:true}).waitFor();
- await app.evaluate(({net,dialog},port)=>{const original=net.fetch.bind(net);net.fetch=(url,options)=>original(`http://127.0.0.1:${port}${new URL(url).pathname}`,options);globalThis.__updateChoice=0;globalThis.__updateDialogs=[];dialog.showMessageBox=async(_window,options)=>{globalThis.__updateDialogs.push(options);return {response:globalThis.__updateChoice,checkboxChecked:false};};},port);
+ await app.evaluate(({net,dialog},port)=>{const original=net.request.bind(net);net.request=options=>{const url=typeof options==='string'?options:options.url;if(new URL(url).hostname!=='updates.example.test')throw new Error('Unexpected fixture host');return original({...(typeof options==='string'?{}:options),url:`http://127.0.0.1:${port}${new URL(url).pathname}`});};globalThis.__updateChoice=0;globalThis.__updateDialogs=[];dialog.showMessageBox=async(_window,options)=>{globalThis.__updateDialogs.push(options);return {response:globalThis.__updateChoice,checkboxChecked:false};};},port);
  return {directory,install,data,page,settings,settingsBytes,debugPort};
 }
 async function choice(n){await app.evaluate((_,n)=>{globalThis.__updateChoice=n;},n);}
@@ -62,6 +64,6 @@ try {
  // Get the relaunched old PID from the browser endpoint's dedicated process query.
  const browserSession=await browser.newBrowserCDPSession();const processes=await browserSession.send('SystemInfo.getProcessInfo');replacementPid=processes.processInfo.find(p=>p.type==='browser').id;
  await screenshot(oldPage,'rollback.png');await stopRestart(oldPage);outcomes.push('verified invalid EXE: real helper replacement attempt fails, old directory restored and old visible App restarts; user files unchanged');
- assert.deepEqual(errors,[]);await fs.writeFile(path.join(run,'report.json'),JSON.stringify({pass:true,run,outcomes,errors,source:'isolated HTTP fixture behind test-only privileged net.fetch mapping; no live release downloaded',rollback:rollbackResult,normal:result},null,2));console.log(JSON.stringify({pass:true,run,outcomes},null,2));
+ assert.deepEqual(errors,[]);await fs.writeFile(path.join(run,'report.json'),JSON.stringify({pass:true,run,outcomes,errors,source:'isolated HTTP fixture behind test-only net.request URL mapping; real native 302 handling for manifest and ZIP; no live release downloaded',rollback:rollbackResult,normal:result},null,2));console.log(JSON.stringify({pass:true,run,outcomes},null,2));
 }catch(error){await fs.writeFile(path.join(run,'report.json'),JSON.stringify({pass:false,run,outcomes,errors,error:error.stack},null,2));console.error(error);process.exitCode=1;}
 finally{if(app)await app.close().catch(()=>{});if(browser){try{await browser.contexts()[0].pages()[0].evaluate(()=>window.kmm.quit());}catch{}await browser.close().catch(()=>{});}await new Promise(resolve=>server.close(resolve));}

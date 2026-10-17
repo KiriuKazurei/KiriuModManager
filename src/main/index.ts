@@ -17,6 +17,7 @@ import { resolveWebUrl } from './web-links';
 import type {IPCChannel,IPCArguments,IPCValue} from '../shared/ipc-contracts';
 import {CharacterCoverService} from './character-covers';
 import {AppUpdater,acknowledgeUpdate} from './app-updater';
+import {fetchUpdate} from './electron-update-fetch';
 import {ModBrowser} from './mod-browser';
 import {OperationLog} from './operation-log';
 import {DependencyError} from './dependencies';
@@ -67,7 +68,7 @@ app.whenReady().then(async () => {
   const ini=new IniService(mods,business.recovery);
   const characterCovers=new CharacterCoverService(app.getPath('userData'),path.join(app.getAppPath(),'assets','character-covers'),mods,bytes=>!nativeImage.createFromBuffer(bytes).isEmpty());
   const deployment = new DeploymentService({ fetch: (url, options) => net.fetch(url, options), cacheDirectory: path.join(app.getPath('userData'), 'downloads'), checkRuntime: () => checkRuntime() });
-  const updater=new AppUpdater({fetch:(url,options)=>net.fetch(url,options),currentVersion:app.getVersion(),cacheDirectory:path.join(app.getPath('userData'),'app-updates'),installRoot,packaged:app.isPackaged,helperPath:path.join(app.getAppPath(),'assets','update-helper.ps1'),protectedPaths:async()=>{const settings=await store.read();return [app.getPath('userData'),...Object.values(settings.games).flatMap(game=>[game.xxmiRoot,game.gameDirectory,...(game.modsDirectory&&isInside(path.join(installRoot,'Mods'),game.modsDirectory)?[]:[game.modsDirectory])])];}});
+  const updater=new AppUpdater({fetch:fetchUpdate,currentVersion:app.getVersion(),cacheDirectory:path.join(app.getPath('userData'),'app-updates'),installRoot,packaged:app.isPackaged,helperPath:path.join(app.getAppPath(),'assets','update-helper.ps1'),protectedPaths:async()=>{const settings=await store.read();return [app.getPath('userData'),...Object.values(settings.games).flatMap(game=>[game.xxmiRoot,game.gameDirectory,...(game.modsDirectory&&isInside(path.join(installRoot,'Mods'),game.modsDirectory)?[]:[game.modsDirectory])])];}});
   let preparingUpdateInstall=false;
   const updateSource=async()=>(await store.read()).desktop?.updateSourceUrl??DEFAULT_APP_UPDATE_SOURCE;
   let pending:Promise<unknown>=Promise.resolve();
