@@ -217,6 +217,7 @@ html.theme-switching,html.theme-switching *{transition:none!important}
 .path-repair>.environment-panel{margin-top:18px}
 .settings-page .operation-hint{display:block!important}
 .app-update-panel .hint{display:block!important}
+.download-card .download-resume-note{color:var(--muted);font-size:13px;line-height:1.6}
 .notice-dialog.notice-dialog{width:min(540px,calc(100vw - 32px));max-height:calc(100dvh - 48px);margin:auto;padding:26px;border:1px solid var(--line);border-radius:18px;background:var(--panel);color:var(--text);box-shadow:0 22px 65px #0005;overflow:auto}
 .notice-dialog::backdrop{background:#050a1466}
 .notice-heading{display:flex;align-items:center;gap:12px;margin-bottom:16px}

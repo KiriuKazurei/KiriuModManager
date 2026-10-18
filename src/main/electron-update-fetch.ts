@@ -3,9 +3,9 @@ import type {FetchClient} from './releases';
 
 // net.fetch cancels manual redirects instead of exposing their Location header.
 // Return each hop to the updater so it can validate HTTPS before making the next request.
-export const fetchUpdate:FetchClient=(url,options={})=>new Promise((resolve,reject)=>{
+export function sessionFetch(session?:Electron.Session):FetchClient {return (url,options={})=>new Promise((resolve,reject)=>{
  if(options.signal?.aborted){reject(options.signal.reason);return;}
- const request=net.request({url,method:'GET',redirect:'manual',credentials:'omit'});
+ const request=net.request({url,method:'GET',redirect:'manual',credentials:session?'include':'omit',...(session?{session,useSessionCookies:true}:{})});
  let settled=false;let bodyEnded=false;let controller:ReadableStreamDefaultController<Uint8Array>|undefined;
  const failBody=(error:unknown)=>{if(controller&&!bodyEnded){bodyEnded=true;controller.error(error);}};
  const cleanup=()=>options.signal?.removeEventListener('abort',abort);
@@ -30,4 +30,5 @@ export const fetchUpdate:FetchClient=(url,options={})=>new Promise((resolve,reje
  });
  try{new Headers(options.headers).forEach((value,key)=>request.setHeader(key,value));request.end();}
  catch(error){settled=true;cleanup();request.abort();reject(error);}
-});
+});}
+export const fetchUpdate:FetchClient=sessionFetch();

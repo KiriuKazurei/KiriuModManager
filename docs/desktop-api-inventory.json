@@ -1398,9 +1398,9 @@
       ],
       "returnType": "Promise<Result<ModBrowserStatus>>",
       "resultValue": "ModBrowserStatus",
-      "cancel": "cancel marks task canceled; native directory confirmation may cancel",
+      "cancel": "cancel discards owned resume fragment; native directory confirmation may cancel",
       "partialSuccess": "per-item results",
-      "meaning": "Owned task actions in the task game; retry-download creates a new task using the currently saved root for new installs, while directed updates keep updateTarget.root; retry-binding keeps the existing task/root; install-current requires native root confirmation; new installs require F01 preflight, retry-install is for directed updates",
+      "meaning": "Owned task ID only; pause checkpoints native bytes, resume verifies fragment SHA256, bound website identity and HTTP Range/validators before restoring same ID/game/root/update target; restart never resumes automatically; explicit retry-download creates a new task using current saved root for new installs, pinned updateTarget.root for updates; install-current requires native root confirmation; new installs require F01 preflight",
       "handler": {
         "file": "src/main/index.ts",
         "line": 226
@@ -1499,7 +1499,7 @@
       "resultValue": "ModBrowserStatus",
       "cancel": "none",
       "partialSuccess": "per-task results",
-      "meaning": "Responsive selected-game browser/download state; both-game tasks retain their game/root; owned cache and interruption records; no cookie values exposed",
+      "meaning": "Responsive selected-game browser/download state; pinned game/root; paused/resuming state, capability and retained byte count; no resume URLs, file paths or cookie values exposed",
       "handler": {
         "file": "src/main/index.ts",
         "line": 224

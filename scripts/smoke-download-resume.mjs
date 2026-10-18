@@ -1,0 +1,61 @@
+import {promises as fs} from 'node:fs';
+import path from 'node:path';
+import {createServer} from 'node:https';
+import {spawn,execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {createRequire} from 'node:module';
+import {createHash} from 'node:crypto';
+import assert from 'node:assert/strict';
+import {zipSync,strToU8} from 'fflate';
+import {_electron as electron} from 'playwright';
+const require=createRequire(import.meta.url),root=process.cwd(),parent=path.resolve('.run-data/download-resume-smoke');await fs.mkdir(parent,{recursive:true});const run=await fs.mkdtemp(path.join(parent,'run-'));
+const {stdout:gitPath}=await promisify(execFile)('git',['--exec-path'],{windowsHide:true});const openssl=path.resolve(gitPath.trim(),'../../../usr/bin/openssl.exe');
+await promisify(execFile)(openssl,['req','-x509','-newkey','rsa:2048','-nodes','-keyout',path.join(run,'key.pem'),'-out',path.join(run,'cert.pem'),'-days','1','-subj','/CN=gamebanana.com','-addext','subjectAltName=DNS:gamebanana.com,DNS:files.gamebanana.com'],{windowsHide:true});
+const payload=Buffer.alloc(4*1024**2);for(let index=0;index<payload.length;index++)payload[index]=index%251;
+const bytes=Buffer.from(zipSync({'Fixture/main.ini':strToU8('[TextureOverride]\nhash=01234567'),'Fixture/payload.bin':payload},{level:0}));
+const md5=createHash('md5').update(bytes).digest('hex'),etag='"'+md5+'"',lastModified='Sun, 18 Oct 2026 00:00:00 GMT';
+const info={_idRow:123,_sName:'续传验收样本',_aGame:{_idRow:19567},_aSubmitter:{_sName:'Fixture'},_sVersion:'1',_aRootCategory:{_sName:'Skins'},_aCategory:{_sName:'Other'},_aFiles:[{_idRow:456,_sFile:'example.zip',_nFilesize:bytes.length,_sDownloadUrl:'https://gamebanana.com/dl/456',_sMd5Checksum:md5,_sAvResult:'clean'}]};
+const rangeRequests=[],errors=[],checks=[];let app;
+const server=createServer({key:await fs.readFile(path.join(run,'key.pem')),cert:await fs.readFile(path.join(run,'cert.pem'))},(request,response)=>{
+ if(request.url.startsWith('/apiv11/Mod/123')){response.writeHead(200,{'content-type':'application/json'});response.end(JSON.stringify(info));return;}
+ if(request.url==='/dl/456'){response.writeHead(302,{location:'https://files.gamebanana.com/mods/example.zip'});response.end();return;}
+ if(request.url!=='/mods/example.zip'){response.writeHead(404);response.end();return;}
+ let start=0,end=bytes.length-1;const range=/^bytes=(\d+)-(\d*)$/.exec(request.headers.range||'');if(range){start=Number(range[1]);if(range[2])end=Number(range[2]);rangeRequests.push({range:request.headers.range,ifRange:request.headers['if-range'],cookie:request.headers.cookie||''});if(!request.headers.cookie?.includes('resume_fixture=yes')){response.writeHead(403);response.end();return;}}
+ if(start>end||end>=bytes.length){response.writeHead(416);response.end();return;}
+ response.writeHead(range?206:200,{'content-type':'application/zip','content-disposition':'attachment; filename="example.zip"','content-length':end-start+1,'accept-ranges':'bytes',etag,'last-modified':lastModified,'set-cookie':'resume_fixture=yes; Path=/; Secure; SameSite=None; Max-Age=3600',...(range?{'content-range':`bytes ${start}-${end}/${bytes.length}`}:{})});
+ let offset=start;const timer=setInterval(()=>{if(offset>end){clearInterval(timer);response.end();return;}const next=Math.min(offset+65536,end+1);response.write(bytes.subarray(offset,next));offset=next;},range&&end===start?1:50);response.on('close',()=>clearInterval(timer));
+});
+await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});const port=server.address().port;
+const rules=`MAP gamebanana.com 127.0.0.1:${port}, MAP files.gamebanana.com 127.0.0.1:${port}`;
+const driver=path.join(run,'native.cjs');
+await fs.writeFile(driver,`
+const {app,session}=require('electron'),fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
+const {ModDownloads}=require(${JSON.stringify(path.join(root,'dist/main/mod-downloads.js'))}),{sessionFetch}=require(${JSON.stringify(path.join(root,'dist/main/electron-update-fetch.js'))});
+const phase=process.argv[2],data=process.argv[3],info=${JSON.stringify(info)},size=${bytes.length};app.setPath('userData',data);app.commandLine.appendSwitch('host-resolver-rules',${JSON.stringify(rules)});app.disableHardwareAcceleration();
+const reportFile=path.join(data,phase+'.json'),sleep=ms=>new Promise(r=>setTimeout(r,ms));async function until(check){const end=Date.now()+30000;while(!await check()){if(Date.now()>end)throw new Error('Native fixture timed out: '+JSON.stringify(downloads?.status()));await sleep(30);}}
+let downloads;const timer=setTimeout(()=>{void fs.writeFile(reportFile,JSON.stringify({pass:false,error:'Native fixture timed out'})).finally(()=>app.exit(1));},45000);
+app.whenReady().then(async()=>{
+ const nativeSession=session.fromPartition('persist:kmm-gamebanana');await nativeSession.setProxy({mode:'direct'});nativeSession.setCertificateVerifyProc((request,callback)=>callback(['gamebanana.com','files.gamebanana.com'].includes(request.hostname)?0:-3));
+ await fs.mkdir(path.join(data,'Mods'),{recursive:true});downloads=new ModDownloads({cache:path.join(data,'mod-downloads'),root:async()=>path.join(data,'Mods'),canStart:()=>true,confirmRoot:async()=>true,showFile:()=>{},requestDownload:()=>{},restoreDownload:options=>nativeSession.createInterruptedDownload(options),resumeFetch:sessionFetch(nativeSession),fetch:async()=>new Response(JSON.stringify(info)),install:async()=>{throw new Error('No automatic install allowed');},plan:async()=>({targetRoot:path.join(data,'Mods'),folders:[''],items:[{entryPath:'',folder:'',name:'Fixture',character:''}]})});await downloads.initialize();
+ nativeSession.on('will-download',(event,item)=>{try{if(!downloads.acceptResume(item))downloads.accept(item,123,item.getURLChain(),'zzz');}catch(error){event.preventDefault();throw error;}});
+ if(phase==='pause'||phase==='abrupt'){nativeSession.downloadURL('https://gamebanana.com/dl/456');await until(()=>downloads.status().at(-1)?.stage==='downloading'&&downloads.status().at(-1).receivedBytes>=262144);const task=downloads.status().at(-1);
+  if(phase==='pause'){await downloads.action(task.id,'pause');assert.equal(downloads.status().at(-1).canResume,true);const retained=downloads.status().at(-1).resumableBytes;await sleep(250);assert.equal(downloads.status().at(-1).receivedBytes,retained);await downloads.close();}
+  else await until(async()=>{try{const saved=JSON.parse(await fs.readFile(path.join(data,'mod-downloads/tasks.json'),'utf8'));return saved.tasks.at(-1)?.resume?.offset>0;}catch{return false;}});
+  await nativeSession.cookies.flushStore();await fs.writeFile(reportFile,JSON.stringify({pass:true,tasks:downloads.status()},null,2));
+ }else{const task=downloads.status().at(-1);assert.equal(task.canResume,true);assert.ok(['paused','interrupted'].includes(task.stage));const offset=task.resumableBytes;await downloads.action(task.id,'resume');await until(()=>downloads.status().at(-1)?.stage==='ready');assert.equal(downloads.status().at(-1).id,task.id);assert.equal(downloads.status().at(-1).receivedBytes,size);assert.equal((await fs.stat(path.join(data,'mod-downloads',task.id,'example.zip'))).size,size);await downloads.close();await fs.writeFile(reportFile,JSON.stringify({pass:true,offset,tasks:downloads.status()},null,2));}
+ clearTimeout(timer);app.exit(0);
+}).catch(async error=>{clearTimeout(timer);await fs.writeFile(reportFile,JSON.stringify({pass:false,error:error.stack,tasks:downloads?.status()},null,2));app.exit(1);});
+`);
+const environment={...process.env};for(const key of ['ELECTRON_RUN_AS_NODE','KMM_DATA_DIR','KMM_DEV_URL','KMM_UPDATE_JOB','KMM_DEBUG_PORT'])delete environment[key];
+async function phase(name,data){await fs.mkdir(data,{recursive:true});const child=spawn(require('electron'),[driver,name,data],{env:environment,windowsHide:true,stdio:['ignore','pipe','pipe']});let output='';for(const stream of [child.stdout,child.stderr])stream.on('data',bytes=>{output=(output+bytes).slice(-5000);});const timer=setTimeout(()=>child.kill(),55000);const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve);});clearTimeout(timer);const report=JSON.parse(await fs.readFile(path.join(data,name+'.json'),'utf8').catch(()=>JSON.stringify({pass:false,error:output})));assert.equal(code,0,JSON.stringify(report));assert.equal(report.pass,true,JSON.stringify(report));return report;}
+try{
+ const normal=path.join(run,'normal');await phase('pause',normal);await phase('resume',normal);checks.push('Real Electron pause saves bytes and cancels native handles; a new process resumes the same task using HTTPS Range and verifies the full archive');
+ const abrupt=path.join(run,'abrupt');await phase('abrupt',abrupt);await phase('resume',abrupt);checks.push('A process exiting without download cleanup leaves a durable checkpoint; a new process recovers it as interrupted and resumes manually');
+ assert.ok(rangeRequests.some(request=>/^bytes=\d+-$/.test(request.range)));assert.ok(rangeRequests.every(request=>request.cookie.includes('resume_fixture=yes')));checks.push('Actual server required and observed the original isolated-session cookie on both range probes and open-ended native continuation');
+ const ui=path.join(run,'ui');await phase('pause',ui);const settings={version:1,selectedGame:'zzz',games:{zzz:{xxmiRoot:'',gameDirectory:'',modsDirectory:path.join(ui,'Mods')},endfield:{xxmiRoot:'',gameDirectory:'',modsDirectory:path.join(ui,'EndfieldMods')}}};await fs.mkdir(settings.games.endfield.modsDirectory);await fs.writeFile(path.join(ui,'settings.json'),JSON.stringify(settings));
+ app=await electron.launch({args:['.','--host-resolver-rules='+rules],cwd:root,env:{...environment,KMM_DATA_DIR:ui},timeout:30000});const page=await app.firstWindow();page.on('pageerror',error=>errors.push(error.message));
+ await app.evaluate(async({app})=>{const req=process.getBuiltinModule('module').createRequire(app.getAppPath()+'/package.json'),state=req(app.getAppPath()+'/dist/main/index.js').desktopRuntime();await state.modBrowser.browserSession.setProxy({mode:'direct'});state.modBrowser.browserSession.setCertificateVerifyProc((request,callback)=>callback(['gamebanana.com','files.gamebanana.com'].includes(request.hostname)?0:-3));});
+ await page.getByRole('button',{name:'下载进度',exact:true}).click();const card=page.locator('.download-card').first();await card.getByText('绝区零 · 已暂停',{exact:true}).waitFor();await page.getByRole('button',{name:'已暂停',exact:true}).click();assert.equal(await page.locator('.download-card').count(),1);await card.getByRole('button',{name:'继续下载',exact:true}).click();await page.getByRole('button',{name:'全部',exact:true}).click();await card.getByRole('button',{name:'暂停',exact:true}).waitFor();await card.getByRole('button',{name:'暂停',exact:true}).click();await card.getByText('绝区零 · 已暂停',{exact:true}).waitFor();await card.locator('.download-resume-note').waitFor({state:'visible'});assert.match(await card.locator('.download-resume-note').innerText(),/已保留.*恢复片段/);await page.screenshot({path:path.join(run,'paused-ui.png')});await card.getByRole('button',{name:'继续下载',exact:true}).click();await card.getByText('绝区零 · 待安装',{exact:true}).waitFor({timeout:30000});assert.equal(await page.locator('dialog[open]').count(),0);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[]);checks.push('Production download page and IPC pause/resume the real native transfer; paused filter and retained progress work; complete archive stays pending for explicit installation');
+ await page.evaluate(()=>window.kmm.quit());await app.close();app=undefined;await fs.writeFile(path.join(run,'report.json'),JSON.stringify({pass:true,checks,rangeRequests,errors},null,2));console.log(JSON.stringify({pass:true,run,checks},null,2));
+}catch(error){await fs.writeFile(path.join(run,'report.json'),JSON.stringify({pass:false,error:error.stack,checks,rangeRequests,errors},null,2));console.error(JSON.stringify({pass:false,run,error:error.stack},null,2));process.exitCode=1;}
+finally{if(app)await app.close().catch(()=>{});server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

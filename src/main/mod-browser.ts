@@ -8,6 +8,7 @@ import {ModDownloads} from './mod-downloads';
 import type {ModDownloadOptions} from './mod-downloads';
 import {validateWebUrl} from './web-links';
 import {GameBananaCookies} from './gamebanana-cookies';
+import {sessionFetch} from './electron-update-fetch';
 
 export class ModBrowser {
  private view:WebContentsView|null=null;
@@ -22,10 +23,10 @@ export class ModBrowser {
  private downloads:ModDownloads;
  private retries=new Map<string,{modId:number;gameId:GameId;target?:ModUpdateTarget}>();
  private origins=new Map<string,{modId:number;gameId:GameId}>();
- constructor(private options:Omit<ModDownloadOptions,'fetch'|'requestDownload'|'showFile'>&{window:BrowserWindow}){
+ constructor(private options:Omit<ModDownloadOptions,'fetch'|'requestDownload'|'showFile'|'restoreDownload'|'resumeFetch'>&{window:BrowserWindow}){
   this.browserSession=session.fromPartition('persist:kmm-gamebanana');
   this.cookies=new GameBananaCookies(this.browserSession.cookies,path.join(app.getPath('userData'),'gamebanana-session-cookies.json'),safeStorage);
-  this.downloads=new ModDownloads({...options,fetch:(url,init)=>this.browserSession.fetch(url instanceof URL?url.href:url,init),requestDownload:(modId,url,gameId,target)=>{const view=this.createView();this.retries.set(url,{modId,gameId,target});view.webContents.downloadURL(url);},showFile:file=>shell.showItemInFolder(file)});
+  this.downloads=new ModDownloads({...options,fetch:(url,init)=>this.browserSession.fetch(url instanceof URL?url.href:url,init),resumeFetch:sessionFetch(this.browserSession) as typeof fetch,restoreDownload:request=>{const {path,urlChain,mimeType,offset,length,eTag,lastModified,startTime}=request;this.browserSession.createInterruptedDownload({path,urlChain,mimeType,offset,length,eTag,lastModified,startTime});},requestDownload:(modId,url,gameId,target)=>{const view=this.createView();this.retries.set(url,{modId,gameId,target});view.webContents.downloadURL(url);},showFile:file=>shell.showItemInFolder(file)});
   this.browserSession.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
   this.browserSession.setPermissionCheckHandler(()=>false);
   this.browserSession.on('will-download',this.onDownload);
@@ -110,9 +111,10 @@ export class ModBrowser {
  recordImport(id:string,result:import('../shared/import-workflows').ImportReceipt){return this.downloads.recordImport(id,result);}
  installPlan(id:string){return this.downloads.installPlan(id);}
  async downloadAction(id:string,action:ModDownloadAction,destinations?:ModInstallDestination[]){await this.downloads.action(id,action,destinations);return this.status();}
- private onDownload=(event:Event,item:DownloadItem,contents:WebContents)=>{
+ private onDownload=(event:Event,item:DownloadItem,contents:WebContents|undefined)=>{
   if(this.closed){event.preventDefault();return;}
-  if(contents!==this.view?.webContents){event.preventDefault();return;}
+  try{if(this.downloads.acceptResume(item))return;}catch(error){event.preventDefault();this.error=(error as Error).message;return;}
+  if(!contents||contents!==this.view?.webContents){event.preventDefault();return;}
   const urls=item.getURLChain();const retry=urls.find(url=>this.retries.has(url));
   const origin=urls.find(url=>this.origins.has(url));
   const updateTarget=retry?this.retries.get(retry)?.target:undefined;const source=retry?this.retries.get(retry):origin?this.origins.get(origin):undefined;const modId=source?.modId||submissionId(contents.getURL());if(retry)this.retries.delete(retry);if(origin)this.origins.delete(origin);

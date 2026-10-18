@@ -9,16 +9,18 @@ import {downloadFileName,gameBananaUrl,MAX_MOD_DOWNLOAD,ModDirectoryChangedError
 import type {GameBananaDownload} from './gamebanana';
 import {writeAtomicJson} from './atomic-json';
 import {logEvent} from './application-log';
+import {nativeResume,readResume,resumeSupported,mirrorPartial,validatePartial,restorePartial,probeResume,type DownloadResume,type ResumeCursor,type ResumeDownloadRequest} from './download-resume';
 
-interface Task {status:ModDownload;modId:number;urls:string[];binding?:GameBananaDownload;item?:DownloadItem;controller?:AbortController;running?:Promise<void>;stopped:boolean;failure?:string}
-const activeStages=['binding','downloading','verifying','installing'];
-const stages=[...activeStages,'ready','waiting-directory','complete','partial','error','canceled','interrupted'];
+interface Task {status:ModDownload;modId:number;urls:string[];binding?:GameBananaDownload;item?:DownloadItem;controller?:AbortController;running?:Promise<void>;stopped:boolean;failure?:string;resume?:DownloadResume;cursor?:ResumeCursor;checkpoint?:Promise<void>;checkpointAt?:number;pauseMode?:'paused'|'interrupted';pauseWork?:Promise<void>;resumeProblem?:string;awaitingResume?:{resolve:()=>void;reject:(error:Error)=>void}}
+const activeStages=['binding','downloading','resuming','verifying','installing'];
+const stages=[...activeStages,'paused','ready','waiting-directory','complete','partial','error','canceled','interrupted'];
 export interface ModDownloadOptions {
  cache:string;fetch:typeof fetch;root:(game:GameId)=>Promise<string>;
  install:(file:string,root:string,binding:GameBananaDownload,destinations?:ModInstallDestination[],target?:ModUpdateTarget)=>Promise<ImportResult&{items:ModDownloadInstallItem[]}>;
  plan:(file:string,root:string,binding:GameBananaDownload,target?:ModUpdateTarget)=>Promise<ModDownloadInstallPlan>;
  canStart:()=>boolean;confirmRoot:(oldRoot:string,newRoot:string)=>Promise<boolean>;
  requestDownload:(modId:number,url:string,game:GameId,target?:ModUpdateTarget)=>void;showFile:(file:string)=>void;
+ restoreDownload?:(request:ResumeDownloadRequest)=>void;resumeFetch?:typeof fetch;
 }
 export class ModDownloads {
  private tasks:Task[]=[];
@@ -41,19 +43,21 @@ export class ModDownloads {
     if(s.character!==undefined&&(typeof s.character!=='string'||s.character.length>120||/[\x00-\x1f]/.test(s.character)))throw new Error('下载任务角色信息无效。');
     if(s.updateTarget&&(s.updateTarget.root!==undefined&&(typeof s.updateTarget.root!=='string'||!path.isAbsolute(s.updateTarget.root))||s.updateTarget.candidateFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(s.updateTarget.candidateFingerprint)))throw new Error('更新任务目录或候选指纹无效。');ids.add(s.id);downloadFileName(s.fileName);row.urls.forEach((url:string)=>gameBananaUrl(url,true));
     const task:Task={status:{...s},modId:row.modId,urls:row.urls,binding:row.binding?readDownloadBinding(row.binding,s.gameId):undefined,stopped:false};
+    if(row.resume){try{task.resume=readResume(row.resume);if(task.binding&&task.resume.length!==task.binding.size)throw new Error('片段与站点大小不一致');await assertNoLinks(this.partial(task));const partial=await fs.stat(this.partial(task));if(!partial.isFile()||partial.size<task.resume.offset||partial.size>MAX_MOD_DOWNLOAD)throw new Error('片段缺失');}catch{task.resume=undefined;task.resumeProblem='恢复片段不可用，请重新下载。';changed=true;}}
     if(task.status.archiveReady){try{await assertNoLinks(this.file(task));const stat=await fs.stat(this.file(task));if(!stat.isFile()||stat.size!==task.status.receivedBytes)throw new Error('missing');}catch{task.status.archiveReady=false;changed=true;}}
-    if(activeStages.includes(task.status.stage)){task.status.stage='interrupted';task.status.message='上次任务已中断；完整包可重试安装，否则请重新下载。';task.status.updatedAt=new Date().toISOString();changed=true;}
+    if(activeStages.includes(task.status.stage)){task.status.stage='interrupted';task.status.message=task.resume?'上次任务已中断，已保存的片段可手动继续。':'上次任务已中断；完整包可重试安装，否则请重新下载。';task.status.updatedAt=new Date().toISOString();changed=true;}
     loaded.push(task);
    }
    this.tasks=loaded;if(changed)await this.persist();await logEvent('downloads','download.records-restored',{tasks:loaded.length,interrupted:loaded.filter(task=>task.status.stage==='interrupted').length,ready:loaded.filter(task=>task.status.archiveReady).length});
   }catch(e){this.available=false;this.error=`无法读取下载记录，原文件已保留：${(e as Error).message}`;await logEvent('downloads','download.records-unreadable',{},'error',e);}
  }
- status(){return this.tasks.map(task=>({...task.status,items:task.status.items.map(item=>({...item})),importedIds:[...task.status.importedIds]}));}
+ status(){return this.tasks.map(task=>({...task.status,canPause:task.status.stage==='downloading'&&!task.pauseWork,canResume:['paused','interrupted','error'].includes(task.status.stage)&&!task.status.archiveReady&&resumeSupported(task.resume)&&!!this.options.restoreDownload&&!task.running&&!task.pauseWork,resumableBytes:task.resume?.offset??0,resumeMessage:task.resumeProblem||(task.resume&&!resumeSupported(task.resume)?'服务器未提供可靠的续传标识，需要重新下载。':''),items:task.status.items.map(item=>({...item})),importedIds:[...task.status.importedIds]}));}
  hasActive(){return this.tasks.some(task=>!!task.running||activeStages.includes(task.status.stage));}
  private assertReady(){if(this.closed||!this.options.canStart())throw new Error('程序正在退出或安装更新，不能开始 Mod 任务。');if(!this.available)throw new Error(this.error);}
  private file(task:Task){return containedPath(this.options.cache,`${task.status.id}/${downloadFileName(task.status.fileName)}`);}
+ private partial(task:Task){return containedPath(this.options.cache,`${task.status.id}/.kmm-resume.part`);}
  private persist(){
-  const file=path.join(this.options.cache,'tasks.json');const payload=JSON.stringify({version:1,tasks:this.tasks.map(task=>({status:task.status,modId:task.modId,urls:task.urls,binding:task.binding}))},null,2);
+  const file=path.join(this.options.cache,'tasks.json');const payload=JSON.stringify({version:1,tasks:this.tasks.map(task=>({status:task.status,modId:task.modId,urls:task.urls,binding:task.binding,resume:task.resume}))},null,2);
   if(Buffer.byteLength(payload)>16*1024**2)return Promise.reject(new Error('下载任务记录超过 16 MiB，原记录已保留，请备份后整理。'));
   const work=this.pending.then(()=>writeAtomicJson(file,payload));
   this.pending=work.catch(e=>{this.error=`下载任务记录保存失败：${e.message}`;});return work;
@@ -61,10 +65,24 @@ export class ModDownloads {
  private async mark(task:Task,stage:ModDownload['stage'],message:string){task.status.stage=stage;task.status.message=message;task.status.updatedAt=new Date().toISOString();await this.persist();await logEvent('downloads','download.stage',{taskId:task.status.id,gameId:task.status.gameId,stage,receivedBytes:task.status.receivedBytes,totalBytes:task.status.totalBytes,archiveReady:task.status.archiveReady},stage==='error'?'error':stage==='partial'||stage==='interrupted'?'warning':'info');}
  private track(task:Task,work:()=>Promise<void>){
   if(task.running)throw new Error('该下载任务正在处理，请等待。');
-  const run=work().catch(async e=>{if(!task.stopped){task.status.stage=e instanceof ModDirectoryChangedError?'waiting-directory':'error';task.status.message=task.failure||(e as Error).message;task.status.updatedAt=new Date().toISOString();if(!task.status.archiveReady)this.cancelItem(task);await this.persist().catch(()=>{});await logEvent('downloads','download.failed',{taskId:task.status.id,gameId:task.status.gameId,stage:task.status.stage},e instanceof ModDirectoryChangedError?'warning':'error',e);}}).finally(()=>{task.running=undefined;});
+  const run=work().catch(async e=>{if(!task.stopped&&!task.pauseMode){task.status.stage=e instanceof ModDirectoryChangedError?'waiting-directory':'error';task.status.message=task.failure||(e as Error).message;task.status.updatedAt=new Date().toISOString();if(!task.status.archiveReady)this.cancelItem(task);await this.persist().catch(()=>{});await logEvent('downloads','download.failed',{taskId:task.status.id,gameId:task.status.gameId,stage:task.status.stage},e instanceof ModDirectoryChangedError?'warning':'error',e);}}).finally(()=>{task.running=undefined;});
   task.running=run;return run;
  }
  private cancelItem(task:Task){try{task.item?.cancel();}catch{/* Native item may already be disposed after completion. */}}
+ private checkpoint(task:Task,force=false){
+  if(!task.item||task.status.archiveReady||!force&&Date.now()-(task.checkpointAt??0)<2000)return task.checkpoint??Promise.resolve();
+  task.checkpointAt=Date.now();const item=task.item,metadata=nativeResume(item);if(!metadata)return task.checkpoint??Promise.resolve();
+  const received=Math.min(item.getReceivedBytes(),metadata.length-1);if(received<=0)return task.checkpoint??Promise.resolve();
+  const work=(task.checkpoint??Promise.resolve()).then(async()=>{if(task.status.archiveReady)return;const cursor=await mirrorPartial(this.file(task),this.partial(task),received,task.cursor);task.cursor=cursor;if(!cursor.offset)return;task.resume=readResume({...metadata,offset:cursor.offset,sha256:cursor.hash.copy().digest('hex')});task.resumeProblem=undefined;await this.persist();});
+  task.checkpoint=work.catch(error=>{if((error as NodeJS.ErrnoException).code!=='ENOENT')task.resumeProblem='恢复片段保存失败：'+(error as Error).message;});return force?work:task.checkpoint;
+ }
+ private suspend(task:Task,mode:'paused'|'interrupted'){
+  if(task.pauseWork)return task.pauseWork;
+  const work=(async()=>{task.pauseMode=mode;try{task.item?.pause();await this.checkpoint(task,true);}catch(error){task.resumeProblem='恢复片段保存失败：'+(error as Error).message;}
+   if(task.status.archiveReady){task.pauseMode=undefined;return;}
+   task.controller?.abort();await this.mark(task,mode,mode==='paused'?'下载已暂停。':'下载已中断；可手动继续或重新下载。');if(task.status.archiveReady){task.pauseMode=undefined;return;}this.cancelItem(task);await task.running;task.status.receivedBytes=task.resume?.offset??task.status.receivedBytes;await this.persist();
+  })().finally(()=>{task.pauseWork=undefined;});task.pauseWork=work;return work;
+ }
  accept(item:DownloadItem,modId:number,urls:string[],gameId:GameId='zzz',updateTarget?:ModUpdateTarget){
   this.assertReady();
   if(!Object.hasOwn(GAMES,gameId))throw new Error('不支持的下载游戏。');
@@ -77,28 +95,51 @@ export class ModDownloads {
   const time=new Date().toISOString();
   const task:Task={modId,urls:[...urls],stopped:false,item,controller:new AbortController(),status:{id:randomUUID(),gameId,purpose:updateTarget?'update':'new-install',...(updateTarget?{updateTarget}:{}),targetRoot:'',fileName:filename,title:'读取 Mod 信息…',stage:'binding',receivedBytes:0,totalBytes:Math.max(0,item.getTotalBytes()),archiveReady:false,message:'正在核对来源和保存目录…',importedIds:[],items:[],createdAt:time,updatedAt:time}};
   // Set synchronously in the native will-download callback; the website never chooses a path.
-  item.setSavePath(this.file(task));this.tasks.push(task);
-  const finished=new Promise<void>((resolve,reject)=>item.once('done',(_event,state)=>{task.status.receivedBytes=item.getReceivedBytes();if(state==='completed'){task.status.archiveReady=true;resolve();}else reject(new Error(task.failure||'下载已取消或中断，请重新下载。'));}));
+  item.setSavePath(this.file(task));this.tasks.push(task);this.attach(task,item,false);
+ }
+ private attach(task:Task,item:DownloadItem,resumed:boolean){
+  task.item=item;task.pauseMode=undefined;
+  const finished=new Promise<void>((resolve,reject)=>item.once('done',(_event,state)=>{task.status.receivedBytes=item.getReceivedBytes();if(state==='completed'){task.pauseMode=undefined;task.status.archiveReady=true;resolve();}else reject(new Error(task.failure||'下载已取消或中断，请重新下载。'));}));
   void finished.catch(()=>{});
   item.on('updated',(_event,state)=>{
    task.status.receivedBytes=item.getReceivedBytes();
-   if(task.status.receivedBytes>MAX_MOD_DOWNLOAD||task.binding&&task.status.receivedBytes>task.binding.size){task.failure='下载大小超过网站记录或限制。';this.cancelItem(task);}
-   else if(state==='interrupted'&&!task.stopped){task.failure='下载中断，请从任务重新下载。';this.cancelItem(task);}
+   if(resumed&&state==='progressing'&&task.resume&&task.status.receivedBytes<task.resume.offset){task.resumeProblem='服务器未继续原片段，已停止下载，请重新下载。';task.pauseMode='interrupted';task.resume=undefined;task.cursor=undefined;this.cancelItem(task);void this.mark(task,'interrupted',task.resumeProblem).catch(error=>{this.error='下载状态保存失败：'+error.message;});}
+   else if(task.status.receivedBytes>MAX_MOD_DOWNLOAD||task.binding&&task.status.receivedBytes>task.binding.size){task.failure='下载大小超过网站记录或限制。';this.cancelItem(task);}
+   else if(state==='interrupted'&&!task.stopped&&!task.pauseMode){void this.suspend(task,'interrupted').catch(error=>{task.resumeProblem=(error as Error).message;this.cancelItem(task);});}
+   else if(!task.pauseMode)void this.checkpoint(task);
   });
   void this.track(task,async()=>{
-   task.status.targetRoot=updateTarget?.root||await this.options.root(gameId);if(task.stopped)return;await this.persist();if(task.stopped)return;
-   task.binding=await resolveGameBananaFile(this.options.fetch,modId,urls,filename,task.controller!.signal,gameId);
-   if(task.stopped)return;
-   if(updateTarget?.candidateFingerprint&&createHash('sha256').update(JSON.stringify(task.binding)).digest('hex')!==updateTarget.candidateFingerprint)throw new Error('更新候选文件信息已改变，请重新检查。');
+   if(!resumed){task.status.targetRoot=task.status.updateTarget?.root||await this.options.root(task.status.gameId);if(task.stopped||task.pauseMode)return;await this.persist();if(task.stopped||task.pauseMode)return;
+   task.binding=await resolveGameBananaFile(this.options.fetch,task.modId,task.urls,task.status.fileName,task.controller!.signal,task.status.gameId);}
+   if(task.stopped||task.pauseMode)return;
+   if(task.status.updateTarget?.candidateFingerprint&&createHash('sha256').update(JSON.stringify(task.binding)).digest('hex')!==task.status.updateTarget.candidateFingerprint)throw new Error('更新候选文件信息已改变，请重新检查。');
+   if(!task.binding)throw new Error('下载来源绑定缺失。');
    task.status.title=task.binding.remote.title;task.status.character=task.binding.metadata.character||'';task.status.totalBytes=task.binding.size;
-   await this.mark(task,'downloading','正在下载，完成后校验并等待安装…');await finished;
-   if(task.stopped)return;
+   await this.mark(task,'downloading',resumed?'正在继续下载，完成后校验并等待安装…':'正在下载，完成后校验并等待安装…');if(resumed)item.resume();await finished;
+   if(task.stopped||task.pauseMode)return;await task.checkpoint;
    await this.prepare(task);
   });
  }
+ acceptResume(item:DownloadItem){
+  const task=this.tasks.find(task=>task.awaitingResume&&path.resolve(this.file(task)).toLowerCase()===path.resolve(item.getSavePath()).toLowerCase());if(!task)return false;
+  const waiting=task.awaitingResume!;task.awaitingResume=undefined;
+  try{if(JSON.stringify(item.getURLChain().map(url=>gameBananaUrl(url,true).href))!==JSON.stringify(task.resume?.urlChain))throw new Error('恢复下载来源不匹配。');this.attach(task,item,true);waiting.resolve();}catch(error){item.cancel();waiting.reject(error as Error);}return true;
+ }
+ private async resumeTask(task:Task){
+  if(!['paused','interrupted','error'].includes(task.status.stage)||task.status.archiveReady||task.running||task.pauseWork||!task.resume||!this.options.restoreDownload)throw new Error('当前任务没有可继续的下载片段，请重新下载。');
+  if(this.tasks.filter(task=>activeStages.includes(task.status.stage)).length>=3)throw new Error('已有 3 个活动下载任务，请等待完成或暂停后再继续。');
+  const previous=task.status.stage;task.stopped=false;task.pauseMode=undefined;task.failure=undefined;task.controller=new AbortController();await this.mark(task,'resuming','正在核对下载片段与服务器资源…');
+  try{await task.checkpoint;if(task.stopped)throw new Error('继续下载已取消。');const record=readResume(task.resume);task.cursor=await validatePartial(this.partial(task),record);
+   const binding=await resolveGameBananaFile(this.options.fetch,task.modId,task.urls,task.status.fileName,task.controller.signal,task.status.gameId);
+   if(binding.size!==record.length||task.binding&&(binding.remote.fileId!==task.binding.remote.fileId||binding.remote.checksum!==task.binding.remote.checksum||binding.remote.checksumAlgorithm!==task.binding.remote.checksumAlgorithm)||task.status.updateTarget?.candidateFingerprint&&createHash('sha256').update(JSON.stringify(binding)).digest('hex')!==task.status.updateTarget.candidateFingerprint)throw new Error('网站文件信息已变化，请重新下载。');
+   await probeResume(this.options.resumeFetch??this.options.fetch,record,AbortSignal.any([task.controller.signal,AbortSignal.timeout(30000)]));this.assertReady();if(task.stopped)throw new Error('继续下载已取消。');
+   await restorePartial(this.partial(task),this.file(task),record);this.assertReady();if(task.stopped)throw new Error('继续下载已取消。');task.binding=binding;task.status.receivedBytes=record.offset;
+   await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>{task.awaitingResume=undefined;reject(new Error('未收到恢复下载事件，请重试。'));},10000);task.awaitingResume={resolve:()=>{clearTimeout(timer);resolve();},reject:error=>{clearTimeout(timer);reject(error);}};try{const {sha256,...request}=record;this.options.restoreDownload!({...request,path:this.file(task)});}catch(error){task.awaitingResume.reject(error as Error);task.awaitingResume=undefined;}});
+  }catch(error){const failure=(error as NodeJS.ErrnoException).code==='ENOENT'?new Error('下载恢复片段已丢失，请重新下载。'):error as Error;if(!task.stopped){task.resumeProblem=failure.message;await this.mark(task,previous,task.resumeProblem);}throw failure;}
+ }
  private async prepare(task:Task){
   this.assertReady();if(!task.binding||!task.status.archiveReady)throw new Error('没有可验证的完整下载包，请重读信息或重新下载。');
-  await this.mark(task,'verifying','正在核对文件大小和网站摘要…');await verifyModDownload(this.file(task),task.binding);
+  await this.mark(task,'verifying','正在核对文件大小和网站摘要…');await verifyModDownload(this.file(task),task.binding);task.resume=undefined;task.cursor=undefined;await fs.rm(this.partial(task),{force:true});
   if(task.stopped)return;
   if(task.status.updateTarget?.candidateFingerprint&&createHash('sha256').update(JSON.stringify(task.binding)).digest('hex')!==task.status.updateTarget.candidateFingerprint)throw new Error('更新候选绑定已改变，请重新检查；压缩包保留。');
   const root=await this.options.root(task.status.gameId);
@@ -145,11 +186,13 @@ export class ModDownloads {
  }
  async action(id:string,action:ModDownloadAction,destinations?:ModInstallDestination[]){
   this.assertReady();const task=this.tasks.find(task=>task.status.id===id);
-  if(!task||!['cancel','retry-download','retry-binding','retry-install','install-current','show-file'].includes(action))throw new Error('下载任务不存在或操作无效。');
+  if(!task||!['pause','resume','cancel','retry-download','retry-binding','retry-install','install-current','show-file'].includes(action))throw new Error('下载任务不存在或操作无效。');
+  if(action==='pause'){if(task.status.stage!=='downloading'||task.pauseWork)throw new Error('当前任务不在可暂停的下载阶段。');await this.suspend(task,'paused');return;}
+  if(action==='resume'){await this.resumeTask(task);return;}
   if(action==='show-file'){if(!task.status.archiveReady)throw new Error('下载包尚未完整保存。');await assertNoLinks(this.file(task));await fs.stat(this.file(task));this.options.showFile(this.file(task));return;}
   if(action==='cancel'){
-   if(!['binding','downloading','verifying'].includes(task.status.stage))throw new Error('任务已经结束或正在提交安装，无法取消。');
-   task.stopped=true;task.controller?.abort();this.cancelItem(task);await this.mark(task,'canceled','已取消，未开始安装。');return;
+   if(!['binding','downloading','paused','resuming','interrupted','verifying'].includes(task.status.stage))throw new Error('任务已经结束或正在提交安装，无法取消。');
+   task.stopped=true;task.controller?.abort();task.awaitingResume?.reject(new Error('继续下载已取消。'));task.awaitingResume=undefined;this.cancelItem(task);await task.pauseWork;await task.checkpoint;task.resume=undefined;task.cursor=undefined;await fs.rm(this.partial(task),{force:true});await this.mark(task,'canceled','已取消，未开始安装。');return;
   }
   if(task.running||activeStages.includes(task.status.stage))throw new Error('该下载任务正在处理，请等待。');
   if(action==='retry-download'){
@@ -178,7 +221,7 @@ export class ModDownloads {
  }
  async close(){
   if(this.closed)return;this.closed=true;
-  for(const task of this.tasks)if(['binding','downloading','verifying'].includes(task.status.stage)){task.stopped=true;task.controller?.abort();this.cancelItem(task);task.status.stage='interrupted';task.status.message='程序退出，任务已中断；下次可手动重试。';task.status.updatedAt=new Date().toISOString();}
+  await Promise.all(this.tasks.map(async task=>{if(['binding','downloading'].includes(task.status.stage)){task.stopped=true;await this.suspend(task,'interrupted').catch(()=>{});}if(['resuming','verifying'].includes(task.status.stage)){task.stopped=true;task.controller?.abort();task.awaitingResume?.reject(new Error('程序正在退出。'));task.awaitingResume=undefined;this.cancelItem(task);task.status.stage='interrupted';task.status.message='程序退出，任务已中断；下次可手动继续或重试。';task.status.updatedAt=new Date().toISOString();}await task.checkpoint;}));
   if(this.available)await this.persist().catch(()=>{});
   await Promise.allSettled(this.tasks.flatMap(task=>task.running?[task.running]:[]));await this.pending;
  }
