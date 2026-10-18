@@ -30,9 +30,9 @@ try{
  await page.getByLabel('选择 '+first.name,{exact:true}).check();await scroll('.mod-list',true);await page.getByLabel('选择 '+last.name,{exact:true}).check();
  await page.locator('.mod-row').filter({has:page.locator('strong',{hasText:last.name})}).click();await page.getByLabel('作者',{exact:true}).fill('大库未保存草稿');
  await scroll('.mod-list',false);await page.getByLabel('选择 '+first.name,{exact:true}).waitFor();assert.equal(await page.getByLabel('选择 '+first.name,{exact:true}).isChecked(),true);
- await page.getByLabel('搜索 Mod',{exact:true}).fill(first.name);await page.locator('.list-caption').filter({hasText:'1 个结果'}).waitFor();assert.equal(await page.getByLabel('选择 '+first.name,{exact:true}).isChecked(),true);
+ await page.getByLabel('搜索 Mod',{exact:true}).fill(first.name);await page.waitForFunction(()=>document.querySelector('.mod-list [role="listitem"]')?.getAttribute('aria-setsize')==='1');assert.equal(await page.getByLabel('选择 '+first.name,{exact:true}).isChecked(),true);
  assert.match(await page.locator('.mod-batch-tools').textContent(),/已选 2 项，筛选内 1 项/);await page.getByRole('button',{name:'重新扫描',exact:true}).click();await ready();assert.equal(await page.getByLabel('作者',{exact:true}).inputValue(),'大库未保存草稿');
- await page.getByLabel('搜索 Mod',{exact:true}).fill('');await page.locator('.list-caption').filter({hasText:'1000 个结果'}).waitFor();
+ await page.getByLabel('搜索 Mod',{exact:true}).fill('');await page.waitForFunction(()=>document.querySelector('.mod-list [role="listitem"]')?.getAttribute('aria-setsize')==='1000');
  const group=page.locator('.exclusive-groups');await group.locator('summary').first().click();await group.locator('.exclusive-member-list.virtual-list').waitFor();assert.ok(await group.locator('.exclusive-member-list input').count()<20);
  await group.locator('.exclusive-member-list .check-row').filter({hasText:first.name}).locator('input').check();await scroll('.exclusive-member-list',true);await group.locator('.exclusive-member-list .check-row').filter({hasText:last.name}).locator('input').check();
  await group.getByLabel('互斥组名称',{exact:true}).fill('虚拟成员草稿');await group.locator('summary').first().click();await group.locator('summary').first().click();assert.equal(await group.getByLabel('互斥组名称',{exact:true}).inputValue(),'虚拟成员草稿');

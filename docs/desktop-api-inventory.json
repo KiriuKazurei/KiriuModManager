@@ -50,7 +50,7 @@
         },
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 39
+          "line": 41
         }
       ],
       "status": "connected"
@@ -1885,7 +1885,7 @@
       "consumers": [
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 47
+          "line": 49
         }
       ],
       "status": "connected"
@@ -1923,7 +1923,7 @@
       "consumers": [
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 32
+          "line": 34
         }
       ],
       "status": "connected"
@@ -1968,7 +1968,7 @@
       "consumers": [
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 52
+          "line": 54
         }
       ],
       "status": "connected"
@@ -2144,7 +2144,7 @@
       "consumers": [
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 45
+          "line": 47
         }
       ],
       "status": "connected"
@@ -2207,7 +2207,7 @@
       "resultValue": "LibrarySnapshot",
       "cancel": "none",
       "partialSuccess": "none",
-      "meaning": "Validated toggle/rename/classify/metadata/provenance/favorite/tags/requirements; metadata does not move files, classify does; shared dependency/exclusivity and collision checks",
+      "meaning": "Validated toggle/rename/classify/metadata/provenance/favorite/tags/requirements; colored tags use per-Mod tags.json with recoverable registry publication; metadata does not move files, classify does; shared dependency/exclusivity and collision checks",
       "handler": {
         "file": "src/main/index.ts",
         "line": 279
@@ -2222,12 +2222,12 @@
       },
       "consumers": [
         {
-          "file": "src/renderer/ModProvenancePanel.tsx",
-          "line": 11
+          "file": "src/renderer/ModTags.tsx",
+          "line": 55
         },
         {
-          "file": "src/renderer/ModOrganizationPanel.tsx",
-          "line": 12
+          "file": "src/renderer/ModProvenancePanel.tsx",
+          "line": 11
         },
         {
           "file": "src/renderer/ModOrganizationPanel.tsx",
@@ -2239,15 +2239,11 @@
         },
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 46
-        },
-        {
-          "file": "src/renderer/ModPage.tsx",
           "line": 48
         },
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 49
+          "line": 50
         },
         {
           "file": "src/renderer/ModPage.tsx",
@@ -2255,7 +2251,11 @@
         },
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 51
+          "line": 53
+        },
+        {
+          "file": "src/renderer/ModPage.tsx",
+          "line": 53
         },
         {
           "file": "src/renderer/FloatingView.tsx",
@@ -2350,11 +2350,11 @@
       "consumers": [
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 52
+          "line": 54
         },
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 52
+          "line": 54
         }
       ],
       "status": "connected"
@@ -2400,15 +2400,15 @@
         },
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 28
+          "line": 30
         },
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 29
+          "line": 31
         },
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 39
+          "line": 41
         },
         {
           "file": "src/renderer/BusinessPage.tsx",
@@ -4263,7 +4263,7 @@
         },
         {
           "file": "src/renderer/ModPage.tsx",
-          "line": 28
+          "line": 30
         },
         {
           "file": "src/renderer/BusinessPage.tsx",

@@ -1,6 +1,6 @@
 {
   "name": "kiriu-mods-manager",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "private": true,
   "description": "本地双游戏 Mod 管理器",
   "main": "dist/main/index.js",
@@ -15,6 +15,7 @@
     "smoke:framework": "node scripts/smoke-framework.mjs",
     "smoke:deployment": "node scripts/smoke-deployment.mjs",
     "smoke:mods": "node scripts/smoke-mods.mjs",
+    "smoke:mod-tags": "node scripts/smoke-mod-tags.mjs",
     "smoke:business": "node scripts/smoke-business.mjs",
     "package:win": "npm.cmd run build && node scripts/package-windows.mjs",
     "smoke:desktop": "node scripts/smoke-desktop.mjs",
